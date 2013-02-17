@@ -9,7 +9,7 @@ type Position = (Int,Int,Int)
 type ValueSet = [Int]
 type Cell = (Position,Maybe Int)
 type Board = [Cell]
-data Group = Row Int | Col Int | Block Int deriving Show
+data Group = Row Int | Col Int | Block Int deriving(Show,Eq)
 type Strategy = Board -> [Cell]
 
 get_block :: Int -> Int -> Int
@@ -90,6 +90,26 @@ onlySquare board = concat $
 			   let vs2 = [1..9] \\ (vs1 ++ (map cell_value d))
 			   ]
 
+is_allowed :: Board -> Int -> Position -> Bool
+is_allowed board value pos = not $ elem value $ row_values pos board ++ col_values pos board ++ block_values pos board 
+
+two_out_of_three :: Strategy
+two_out_of_three board = nub $
+	[ (vcand, Just v) | 
+		gset <- [[Row 0, Row 1, Row 2], [Row 3, Row 4, Row 5], [Row 6, Row 7, Row 8],
+		         [Col 0, Col 1, Col 2], [Col 3, Col 4, Col 5], [Col 6, Col 7, Col 8]],
+		v <- [1..9],
+		g1 <- gset, g2 <- gset, g3 <- gset,
+		g1 /= g2, g1 /= g3, g2 /= g3,
+		let g1d = distincts_in_group board g1,
+		let g2d = distincts_in_group board g2,
+		let (g3d, g3nd) = split_group_by_distinct g3 board,
+		elem v (map cell_value g1d), elem v (map cell_value g2d), not(elem v (map cell_value g3d)),
+		let vcands = filter (is_allowed board v) (map cell_position g3nd),
+		length vcands == 1,
+		let vcand = head vcands
+	]
+
 -----------------------------------------------------------------------------
 
 string2board :: String -> Board
@@ -135,6 +155,19 @@ sample3 = string2board $
 	"684521837" ++
 	"87.6.35.."
 
+sample4 :: Board
+sample4 = string2board $
+	"..951..62" ++
+	"634...59." ++
+	"1256397.4" ++
+	"25.84763." ++
+	"46..5..17" ++
+	".87361.25" ++
+	"5.6173248" ++
+	".12...976" ++
+	"74..961.."
+
 test1 = onlyChoice sample1 == [((0,1,0),Just 4)]
 test2 = singlePossibility sample2 == [((0,1,0),Just 9),((2,2,0),Just 3),((0,3,3),Just 7),((3,3,4),Just 3),((1,4,3),Just 3),((0,5,3),Just 6),((6,5,5),Just 3),((5,6,7),Just 2),((6,6,8),Just 8),((2,7,6),Just 6)]
 test3 = onlySquare sample3 == [((2,8,6),Just 1),((2,0,0),Just 3)]
+test4 = two_out_of_three sample4 == [((8,1,2),Just 1),((6,0,2),Just 3),((5,0,1),Just 4),((2,3,3),Just 1),((2,4,3),Just 3),((6,5,5),Just 4),((6,4,5),Just 8),((3,8,7),Just 2),((1,6,6),Just 9),((1,0,0),Just 7),((5,7,7),Just 5),((3,1,1),Just 7),((3,4,4),Just 9),((7,8,8),Just 5),((8,3,5),Just 9)]
