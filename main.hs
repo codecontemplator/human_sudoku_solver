@@ -1,9 +1,11 @@
 -- http://www.sudokudragon.com/sudokustrategy.htm
 
 import Data.List
---(`\\`)
-import Data.Char(ord)
-import Data.Maybe(fromJust, isJust)
+--(`\\`, unlines)
+import Data.Char(ord, chr, digitToInt, intToDigit)
+import Data.Maybe(fromJust, isJust, isNothing)
+import Debug.Trace(trace)
+import Data.List.Split(chunksOf)
 
 type Position = (Int,Int,Int)
 type ValueSet = [Int]
@@ -110,7 +112,56 @@ two_out_of_three board = nub $
 		let vcand = head vcands
 	]
 
+replace_by_position :: Board -> [Cell] -> Board
+replace_by_position board cells = 	
+	let cell_positions = map cell_position cells in
+	[ (p,v) | (p,v) <- board, notElem p cell_positions ] ++ cells
+
+is_complete :: Board -> Bool
+is_complete board = not $ any isNothing $ map snd board
+
+solve_internal :: Board -> [(String,Strategy)] -> Maybe ([String], Board)
+solve_internal board named_strategies =	
+	apply_strategies board []
+	where
+		apply_strategies_once :: Board -> [(String,Strategy)] -> Maybe(String,Board)
+		apply_strategies_once board [] = Nothing
+		apply_strategies_once board ((name,strategy):rest) =
+			case strategy board of
+				[] -> apply_strategies_once board rest
+				cells -> Just (name, replace_by_position board cells)
+		apply_strategies :: Board -> [String] -> Maybe([String],Board)
+		apply_strategies board names = 
+			case apply_strategies_once board named_strategies of
+				Just (name, board') -> 
+					trace name $
+						let names' = names ++ [name] in
+						if is_complete board' then Just (names', board') else apply_strategies board' names'
+				_ -> trace (show board) Nothing
+
+solve  :: Board -> Maybe ([String], Board)
+solve board = solve_internal board strategies
+	where strategies = [("onlyChoice",onlyChoice),
+						("onlySquare", onlySquare),
+						("two_out_of_three", two_out_of_three),
+						("singlePossibility", singlePossibility)]
+
 -----------------------------------------------------------------------------
+
+board2string :: Board -> String
+board2string board =
+	let 
+		cell_positions = concatMap (\r -> map (\c -> (c, r, get_block c r)) [0..8]) [0..8]
+		cell_values = chunksOf 9 $ map (\c -> fromJust (lookup c board)) cell_positions		
+		v2ch :: Maybe Int -> Char
+		v2ch v = case v of
+					Just(v') -> intToDigit v'
+					Nothing -> '.'					
+	in
+		unlines $ map (\r -> map v2ch r) cell_values
+
+displayBoard :: Board -> IO()
+displayBoard board = putStrLn $ board2string board
 
 string2board :: String -> Board
 string2board s = map char2cell (zip [0..] s)
