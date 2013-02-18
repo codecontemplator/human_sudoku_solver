@@ -218,6 +218,23 @@ sample4 = string2board $
 	".12...976" ++
 	"74..961.."
 
+-- http://www.svd.se/kultur/spel/sudoku/
+sampleEasy :: Board
+sampleEasy = string2board $
+	"26.81.3.." ++
+	"5.47.9..." ++ 
+	"......4.6" ++
+	"..35.6148" ++
+	".4....927" ++
+	"8...97..." ++
+	"1.6..28.4" ++
+	".89.4.712" ++
+	"47..3..5."
+
+-- produces invalid solution: 
+-- solve sampleEasy
+-- ... we have a bug...
+
 test1 = onlyChoice sample1 == [((0,1,0),Just 4)]
 test2 = singlePossibility sample2 == [((0,1,0),Just 9),((2,2,0),Just 3),((0,3,3),Just 7),((3,3,4),Just 3),((1,4,3),Just 3),((0,5,3),Just 6),((6,5,5),Just 3),((5,6,7),Just 2),((6,6,8),Just 8),((2,7,6),Just 6)]
 test3 = onlySquare sample3 == [((2,8,6),Just 1),((2,0,0),Just 3)]
