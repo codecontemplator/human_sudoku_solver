@@ -116,8 +116,17 @@ string2board s = map char2cell (zip [0..] s)
 -- strategies
 -------------------------------------------------------------------------------------------------
 
-onlyChoice :: Strategy
-onlyChoice board = 
+--
+-- Only choice
+--
+-- There may be only one possible choice for a particular Sudoku square. In the simplest case 
+-- you have a group (row, column or region) that has eight squares allocated leaving only one 
+-- remaining choice available; so the remaining number must go in that empty square.
+--
+-- ref: http://www.sudokudragon.com/sudokustrategy.htm
+-- 
+only_choice :: Strategy
+only_choice board = 
     [ (unalloc_pos d g, Just(unalloc_val d)) | g <- all_groups, let d = distincts_in_group board g, length d == 8 ]
     where 
         unalloc_pos :: [Cell] -> Group -> Position
@@ -125,13 +134,17 @@ onlyChoice board =
         unalloc_val :: [Cell] -> Int
         unalloc_val cells = head $ [1..9] \\ (map cell_value cells)
 
+--
 -- Naked single / single possibility
+--
 -- The "naked single" solving technique also known as "singleton" or "lone number" 
 -- is one of the simplest Sudoku solving techniques. Using this technique the candidate 
 -- values of an empty cell are determined by examining the values of filled cells in the 
 -- row, column and box to which the cell belongs. If the empty cell has just one single 
 -- candidate value then this must be the value of the cell.
-
+--
+-- ref: http://www.sudoku-solutions.com/solvingNakedSubsets.php#nakedSingle
+--
 naked_single :: Strategy
 naked_single board = 
 	[ (p, Just (head vs)) | 
@@ -140,20 +153,50 @@ naked_single board =
 			 length vs == 1 
 	]
 
-onlySquare :: Strategy
-onlySquare board = concat $
+
+--
+-- Only square (I find no point in using this strategy - use naked single instead)
+--
+-- Often you will find within a group of Sudoku squares that there is only one place that 
+-- can take a particular number. For example if a group has seven squares allocated with only 
+-- two numbers left to allocate it is often the case that an intersecting (or shared) group forces 
+-- a number to go in one of the squares and not the other one. You are left with an 'only square' 
+-- within a group for a number to go in. This is different to the 'single possibility' rule where we 
+-- looked at squares on their own rather than as a group.
+--
+-- ref: http://www.sudokudragon.com/sudokustrategy.htm
+--
+only_square :: Strategy
+only_square board = concat $
 	[ [(p1,Just(head vs1)), (p2, Just(head vs2))] | 
 			   g <- all_groups, 
 			   let (d, nd) = split_group_by_distinct g board,
 			   length nd == 2,			   
-			   nd1 <- nd,
-			   let (p1,_) = nd1,
-			   let (p2,_) = head $ nd \\ [nd1],
+			   nd1 <- nd, nd2 <- nd, nd1 /= nd2,			   
+			   let p1 = cell_position nd1, let p2 = cell_position nd2,
 			   let vs1 = [1..9] \\ (row_values p1 board ++ col_values p1 board ++ block_values p1 board),
 			   length vs1 == 1,
 			   let vs2 = [1..9] \\ (vs1 ++ (map cell_value d))
-			   ]
+	]
 
+-- 
+-- Two out of three
+--
+-- The two lines out of three lines strategy is one of the most useful Sudoku strategies. 
+-- It finds most of the simplest to solve squares and can be used in a systematic manner to 
+-- clear up the first and last few squares in the puzzle.
+-- Take three lines (rows or columns) in a region. Look for the occurrences of a particular 
+-- symbol, lets say '5' in these lines. If you find three occurrences then the symbol is 'solved' 
+-- in those lines so move on to the next set of three. However if you find two then that automatically 
+-- narrows down where the remaining '5' can occur, it can not occur in the two lines you have found 
+-- containing the '5' or the regions of three squares in which the '5' occurs. You have narrowed 
+-- the search so '5' must be in one of three squares. It's often the case that one or two of these 
+-- squares are already filled so you can work out simply in which square the '5' must go. If you 
+-- do this for each group of three rows then all groups of three columns you soon scan the whole 
+-- grid for one symbol and then simply repeat for each symbol.
+--
+-- ref: http://www.sudokudragon.com/forum/twothreestrategy.htm
+--
 two_out_of_three :: Strategy
 two_out_of_three board = nub $
 	[ (vcand, Just v) | 
@@ -201,8 +244,8 @@ solve_internal board named_strategies =
 
 solve  :: Board -> Maybe ([String], Board)
 solve board = solve_internal board strategies
-	where strategies = [("onlyChoice",onlyChoice),
-						("onlySquare", onlySquare),
+	where strategies = [("only_choice",only_choice),
+						("only_square", only_square),
 						("two_out_of_three", two_out_of_three),
 						("naked_single", naked_single)]
 
@@ -282,7 +325,7 @@ sampleEasy = string2board $
 -- solve sampleEasy
 -- ... we have a bug...
 
-test1 = onlyChoice sample1 == [((0,1,0),Just 4)]
+test1 = only_choice sample1 == [((0,1,0),Just 4)]
 test2 = naked_single sample2 == 
 			[((0,1,0),Just 9), -- ok
 			 ((2,2,0),Just 3), -- missing on page. validated correct.
@@ -294,5 +337,5 @@ test2 = naked_single sample2 ==
 			 ((5,6,7),Just 2), -- ok
 			 ((6,6,8),Just 8), -- ok
 			 ((2,7,6),Just 6)] -- ok
-test3 = onlySquare sample3 == [((2,8,6),Just 1),((2,0,0),Just 3)]
+test3 = only_square sample3 == [((2,8,6),Just 1),((2,0,0),Just 3)]
 test4 = two_out_of_three sample4 == [((8,1,2),Just 1),((6,0,2),Just 3),((5,0,1),Just 4),((2,3,3),Just 1),((2,4,3),Just 3),((6,5,5),Just 4),((6,4,5),Just 8),((3,8,7),Just 2),((1,6,6),Just 9),((1,0,0),Just 7),((5,7,7),Just 5),((3,1,1),Just 7),((3,4,4),Just 9),((7,8,8),Just 5),((8,3,5),Just 9)]
