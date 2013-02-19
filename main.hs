@@ -127,12 +127,13 @@ string2board s = map char2cell (zip [0..] s)
 -- 
 only_choice :: Strategy
 only_choice board = 
-    [ (unalloc_pos d g, Just(unalloc_val d)) | g <- all_groups, let d = distincts_in_group board g, length d == 8 ]
-    where 
-        unalloc_pos :: [Cell] -> Group -> Position
-        unalloc_pos cells g = head $ positions_in_group g \\ map cell_position cells
-        unalloc_val :: [Cell] -> Int
-        unalloc_val cells = head $ [1..9] \\ (map cell_value cells)
+    [ (p, v) | 
+    	g <- all_groups, 
+    	let (d,nd) = partition is_distinct (cells_in_group g board), 
+    	length nd == 1,
+    	let [(p,_)] = nd,
+    	let v = Just $ head $ [1..9] \\ (map cell_value d)
+    ]
 
 --
 -- Naked single / single possibility
