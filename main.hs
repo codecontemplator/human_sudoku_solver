@@ -1,4 +1,9 @@
 -- http://www.sudokudragon.com/sudokustrategy.htm
+-- http://www.sudoku-solutions.com/
+
+-----------------------------------------------------------------------------
+-- imports
+-----------------------------------------------------------------------------
 
 import Data.List
 --(`\\`, unlines)
@@ -7,12 +12,20 @@ import Data.Maybe(fromJust, isJust, isNothing)
 import Debug.Trace(trace)
 import Data.List.Split(chunksOf)
 
+-----------------------------------------------------------------------------
+-- types
+-----------------------------------------------------------------------------
+
 type Position = (Int,Int,Int)
 type ValueSet = [Int]
 type Cell = (Position,Maybe Int)
 type Board = [Cell]
 data Group = Row Int | Col Int | Block Int deriving(Show,Eq)
 type Strategy = Board -> [Cell]
+
+-----------------------------------------------------------------------------
+-- fundamentals
+-----------------------------------------------------------------------------
 
 get_block :: Int -> Int -> Int
 get_block c r = quot c 3 + (quot r 3) * 3
@@ -56,14 +69,6 @@ all_positions = [(c,r,b) | c <- [0..8], r <- [0..8], let b = get_block c r ]
 positions_of_non_distincts :: Board -> [Position]
 positions_of_non_distincts board = [ p | (p,vs) <- board, not(is_distinct (p,vs))]
 
-onlyChoice :: Strategy
-onlyChoice board = 
-    [ (unalloc_pos d g, Just(unalloc_val d)) | g <- all_groups, let d = distincts_in_group board g, length d == 8 ]
-    where 
-        unalloc_pos :: [Cell] -> Group -> Position
-        unalloc_pos cells g = head $ positions_in_group g \\ map cell_position cells
-        unalloc_val :: [Cell] -> Int
-        unalloc_val cells = head $ [1..9] \\ (map cell_value cells)
 
 row_values :: Position -> Board -> ValueSet
 row_values (c1,r1,b1) board = map cell_value $ filter (\((c,r,b),_)->c==c1&&r/=r1) $ filter is_distinct board
@@ -74,9 +79,66 @@ col_values (c1,r1,b1) board = map cell_value $ filter (\((c,r,b),_)->r==r1&&c/=c
 block_values :: Position -> Board -> ValueSet
 block_values (c1,r1,b1) board = map cell_value $ filter (\((c,r,b),_)->not(r==r1&&c==c1)&&b1==b) $ filter is_distinct board
 
-singlePossibility :: Strategy
-singlePossibility board = 
-	[ (p, Just (head vs)) | p <- positions_of_non_distincts board, let vs = [1..9] \\ (row_values p board ++ col_values p board ++ block_values p board), length vs == 1 ]
+is_allowed :: Board -> Int -> Position -> Bool
+is_allowed board value pos = not $ elem value $ row_values pos board ++ col_values pos board ++ block_values pos board 
+
+is_complete :: Board -> Bool
+is_complete board = not $ any isNothing $ map snd board
+
+-------------------------------------------------------------------------------------------------
+-- formatting / io
+-------------------------------------------------------------------------------------------------
+
+board2string :: Board -> Bool -> String
+board2string board format =
+	let 
+		cell_positions = concatMap (\r -> map (\c -> (c, r, get_block c r)) [0..8]) [0..8]
+		cell_values = chunksOf 9 $ map (\c -> fromJust (lookup c board)) cell_positions		
+		v2ch :: Maybe Int -> Char
+		v2ch v = case v of
+					Just(v') -> intToDigit v'
+					Nothing -> '.'					
+		formatter = if format then unlines else concat
+	in
+		formatter $ map (\r -> map v2ch r) cell_values
+
+displayBoard :: Board -> IO()
+displayBoard board = putStrLn $ board2string board True
+
+string2board :: String -> Board
+string2board s = map char2cell (zip [0..] s)
+	where 
+		char2cell (i,ch) = ((c,r,get_block c r), vs)
+			where (c, r) = (i `mod` 9, i `quot` 9)
+			      vs = if ch == '.' then Nothing else Just (ord ch - ord '0')
+
+-------------------------------------------------------------------------------------------------
+-- strategies
+-------------------------------------------------------------------------------------------------
+
+onlyChoice :: Strategy
+onlyChoice board = 
+    [ (unalloc_pos d g, Just(unalloc_val d)) | g <- all_groups, let d = distincts_in_group board g, length d == 8 ]
+    where 
+        unalloc_pos :: [Cell] -> Group -> Position
+        unalloc_pos cells g = head $ positions_in_group g \\ map cell_position cells
+        unalloc_val :: [Cell] -> Int
+        unalloc_val cells = head $ [1..9] \\ (map cell_value cells)
+
+-- Naked single / single possibility
+-- The "naked single" solving technique also known as "singleton" or "lone number" 
+-- is one of the simplest Sudoku solving techniques. Using this technique the candidate 
+-- values of an empty cell are determined by examining the values of filled cells in the 
+-- row, column and box to which the cell belongs. If the empty cell has just one single 
+-- candidate value then this must be the value of the cell.
+
+naked_single :: Strategy
+naked_single board = 
+	[ (p, Just (head vs)) | 
+		p <- positions_of_non_distincts board, 
+			 let vs = [1..9] \\ (row_values p board ++ col_values p board ++ block_values p board), 
+			 length vs == 1 
+	]
 
 onlySquare :: Strategy
 onlySquare board = concat $
@@ -91,9 +153,6 @@ onlySquare board = concat $
 			   length vs1 == 1,
 			   let vs2 = [1..9] \\ (vs1 ++ (map cell_value d))
 			   ]
-
-is_allowed :: Board -> Int -> Position -> Bool
-is_allowed board value pos = not $ elem value $ row_values pos board ++ col_values pos board ++ block_values pos board 
 
 two_out_of_three :: Strategy
 two_out_of_three board = nub $
@@ -112,13 +171,14 @@ two_out_of_three board = nub $
 		let vcand = head vcands
 	]
 
+-----------------------------------------------------------------------------
+-- solver
+-----------------------------------------------------------------------------
+
 replace_by_position :: Board -> [Cell] -> Board
 replace_by_position board cells = 	
 	let cell_positions = map cell_position cells in
 	[ (p,v) | (p,v) <- board, notElem p cell_positions ] ++ cells
-
-is_complete :: Board -> Bool
-is_complete board = not $ any isNothing $ map snd board
 
 solve_internal :: Board -> [(String,Strategy)] -> Maybe ([String], Board)
 solve_internal board named_strategies =	
@@ -137,39 +197,21 @@ solve_internal board named_strategies =
 					trace name $
 						let names' = names ++ [name] in
 						if is_complete board' then Just (names', board') else apply_strategies board' names'
-				_ -> trace (board2string board) Nothing
+				_ -> trace (board2string board True) Nothing
 
 solve  :: Board -> Maybe ([String], Board)
 solve board = solve_internal board strategies
 	where strategies = [("onlyChoice",onlyChoice),
 						("onlySquare", onlySquare),
 						("two_out_of_three", two_out_of_three),
-						("singlePossibility", singlePossibility)]
+						("naked_single", naked_single)]
 
 -----------------------------------------------------------------------------
+-- test
+-----------------------------------------------------------------------------
 
-board2string :: Board -> String
-board2string board =
-	let 
-		cell_positions = concatMap (\r -> map (\c -> (c, r, get_block c r)) [0..8]) [0..8]
-		cell_values = chunksOf 9 $ map (\c -> fromJust (lookup c board)) cell_positions		
-		v2ch :: Maybe Int -> Char
-		v2ch v = case v of
-					Just(v') -> intToDigit v'
-					Nothing -> '.'					
-	in
-		unlines $ map (\r -> map v2ch r) cell_values
-
-displayBoard :: Board -> IO()
-displayBoard board = putStrLn $ board2string board
-
-string2board :: String -> Board
-string2board s = map char2cell (zip [0..] s)
-	where 
-		char2cell (i,ch) = ((c,r,get_block c r), vs)
-			where (c, r) = (i `mod` 9, i `quot` 9)
-			      vs = if ch == '.' then Nothing else Just (ord ch - ord '0')
-
+-- puzzle:   ...7...58.56218793......1.........81...376...96.........5........4.2183.87...3...
+-- solution: 123769458456218793789435162347952681518376249962184375235847916694521837871693524
 sample1 :: Board
 sample1 = string2board $ 
 	"...7...58" ++
@@ -182,6 +224,11 @@ sample1 = string2board $
 	"..4.2183." ++
 	"87...3..."
 
+-- puzzle:   825631974.67.24..84....76.2.59.482611.8269745.4.175.8.3.14.....5....34..294..65..
+-- solution: 825631974967524138413897652759348261138269745642175389371452896586913427294786513
+-- rated: very easy by http://www.sudoku-solutions.com/
+-- can be solved using single possibily only
+-- test ok: displayBoard $ snd $ fromJust $ solve_internal sample2 [("singlePossibility", singlePossibility)]
 sample2 :: Board
 sample2 = string2board $
 	"825631974" ++
@@ -236,6 +283,16 @@ sampleEasy = string2board $
 -- ... we have a bug...
 
 test1 = onlyChoice sample1 == [((0,1,0),Just 4)]
-test2 = singlePossibility sample2 == [((0,1,0),Just 9),((2,2,0),Just 3),((0,3,3),Just 7),((3,3,4),Just 3),((1,4,3),Just 3),((0,5,3),Just 6),((6,5,5),Just 3),((5,6,7),Just 2),((6,6,8),Just 8),((2,7,6),Just 6)]
+test2 = naked_single sample2 == 
+			[((0,1,0),Just 9), -- ok
+			 ((2,2,0),Just 3), -- missing on page. validated correct.
+			 ((0,3,3),Just 7), -- ok
+			 ((3,3,4),Just 3), -- ok
+			 ((1,4,3),Just 3), -- ok
+			 ((0,5,3),Just 6), -- ok
+			 ((6,5,5),Just 3), -- ok
+			 ((5,6,7),Just 2), -- ok
+			 ((6,6,8),Just 8), -- ok
+			 ((2,7,6),Just 6)] -- ok
 test3 = onlySquare sample3 == [((2,8,6),Just 1),((2,0,0),Just 3)]
 test4 = two_out_of_three sample4 == [((8,1,2),Just 1),((6,0,2),Just 3),((5,0,1),Just 4),((2,3,3),Just 1),((2,4,3),Just 3),((6,5,5),Just 4),((6,4,5),Just 8),((3,8,7),Just 2),((1,6,6),Just 9),((1,0,0),Just 7),((5,7,7),Just 5),((3,1,1),Just 7),((3,4,4),Just 9),((7,8,8),Just 5),((8,3,5),Just 9)]
