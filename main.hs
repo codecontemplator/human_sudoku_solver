@@ -326,8 +326,11 @@ sampleEasy = string2board $
 -- solve sampleEasy
 -- ... we have a bug...
 
-test1 = only_choice sample1 == [((0,1,0),Just 4)]
-test2 = naked_single sample2 == 
+run_test = not . any (==False) $ [
+		only_choice sample1 == 
+			[((0,1,0),Just 4)]
+		,
+		naked_single sample2 == 
 			[((0,1,0),Just 9), -- ok
 			 ((2,2,0),Just 3), -- missing on page. validated correct.
 			 ((0,3,3),Just 7), -- ok
@@ -338,5 +341,25 @@ test2 = naked_single sample2 ==
 			 ((5,6,7),Just 2), -- ok
 			 ((6,6,8),Just 8), -- ok
 			 ((2,7,6),Just 6)] -- ok
-test3 = only_square sample3 == [((2,8,6),Just 1),((2,0,0),Just 3)]
-test4 = two_out_of_three sample4 == [((8,1,2),Just 1),((6,0,2),Just 3),((5,0,1),Just 4),((2,3,3),Just 1),((2,4,3),Just 3),((6,5,5),Just 4),((6,4,5),Just 8),((3,8,7),Just 2),((1,6,6),Just 9),((1,0,0),Just 7),((5,7,7),Just 5),((3,1,1),Just 7),((3,4,4),Just 9),((7,8,8),Just 5),((8,3,5),Just 9)]
+		,
+		only_square sample3 == 
+			[((2,8,6),Just 1),((2,0,0),Just 3)]
+		,
+		two_out_of_three sample4 == 
+			[((8,1,2),Just 1),
+			 ((6,0,2),Just 3),
+			 ((5,0,1),Just 4),
+			 ((2,3,3),Just 1),
+			 ((2,4,3),Just 3),
+			 ((6,5,5),Just 4),
+			 ((6,4,5),Just 8),
+			 ((3,8,7),Just 2),
+			 ((1,6,6),Just 9),
+			 ((1,0,0),Just 7),
+			 ((5,7,7),Just 5),
+			 ((3,1,1),Just 7),
+			 ((3,4,4),Just 9),
+			 ((7,8,8),Just 5),
+			 ((8,3,5),Just 9)]
+	]
+
