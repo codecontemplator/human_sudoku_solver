@@ -175,11 +175,10 @@ only_square :: Strategy
 only_square board = concat $
 	[ [(p1,Just(head vs1)), (p2, Just(head vs2))] | 
 			   g <- all_groups, 
-			   let (d, nd) = split_group_by_distinct g board,
+			   let (d, nd) = partition is_distinct (cells_in_group g board),
 			   length nd == 2,			   
-			   nd1 <- nd, nd2 <- nd, nd1 /= nd2,			   
-			   let p1 = cell_position nd1, let p2 = cell_position nd2,
-			   let vs1 = [1..9] \\ (row_values p1 board ++ col_values p1 board ++ block_values p1 board),
+			   (p1,_) <- nd, (p2,_) <- nd, p1 /= p2,	
+			   let vs1 = [1..9] \\ [ fromJust v | c@(p,v) <- board, is_distinct c, is_shared p1 p],
 			   length vs1 == 1,
 			   let vs2 = [1..9] \\ (vs1 ++ (map cell_value d))
 	]
@@ -330,7 +329,8 @@ sampleEasy = string2board $
 -- solve sampleEasy
 -- ... we have a bug...
 
-run_test = not . any (==False) $ [
+run_test = not . any (==False) $ 
+	[
 		only_choice sample1 == 
 			[((0,1,0),Just 4)]
 		,
