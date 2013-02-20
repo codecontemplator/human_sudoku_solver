@@ -79,8 +79,8 @@ col_values (c1,r1,b1) board = map cell_value $ filter (\((c,r,b),_)->r==r1&&c/=c
 block_values :: Position -> Board -> ValueSet
 block_values (c1,r1,b1) board = map cell_value $ filter (\((c,r,b),_)->not(r==r1&&c==c1)&&b1==b) $ filter is_distinct board
 
-is_shared :: Position -> Cell -> Bool
-is_shared (c1,r1,b1) ((c,r,b),_) = c==c1&&r/=r1 || r==r1&&c/=c1 || not(r==r1&&c==c1)&&b1==b
+is_shared :: Position -> Position -> Bool
+is_shared (c1,r1,b1) (c,r,b) = c==c1&&r/=r1 || r==r1&&c/=c1 || not(r==r1&&c==c1)&&b1==b
 
 is_allowed :: Board -> Int -> Position -> Bool
 is_allowed board value pos = not $ elem value $ row_values pos board ++ col_values pos board ++ block_values pos board 
@@ -153,9 +153,8 @@ naked_single :: Strategy
 naked_single board = 
 	[ (p, Just (head vs)) | 
 		let (d,nd) = partition is_distinct board,
-		p <- map cell_position nd,
-		let shared = filter (is_shared p) d,
-		let vs = [1..9] \\ (map cell_value shared), 
+		(p,_) <- nd,
+		let vs = [1..9] \\ [ v1 | (p1,(Just v1)) <- d, is_shared p p1],
 		length vs == 1 
 	]
 
