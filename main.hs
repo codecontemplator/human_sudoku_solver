@@ -178,7 +178,7 @@ only_square board = concat $
 --
 two_out_of_three :: Strategy
 two_out_of_three board = nub $
-	[ (vcand, [v]) | 
+	[ (vp, [v]) | 
 		gset <- [[Row 0, Row 1, Row 2], [Row 3, Row 4, Row 5], [Row 6, Row 7, Row 8],
 		         [Col 0, Col 1, Col 2], [Col 3, Col 4, Col 5], [Col 6, Col 7, Col 8]],
 		v <- [1..9],
@@ -188,9 +188,9 @@ two_out_of_three board = nub $
 		let g2d = [ c | c@(p,_) <- board, is_distinct c, is_group_member g2 p ],
 		let (g3d, g3nd) = partition is_distinct [ c | c@(p,_) <- board, is_group_member g3 p ],
 		elem v (map cell_value g1d), elem v (map cell_value g2d), not(elem v (map cell_value g3d)),
-		let vcands = filter (is_allowed board v) (map cell_position g3nd),
-		length vcands == 1,
-		let vcand = head vcands
+		let valid_positions_for_v = [ p | (p,_) <- g3nd, is_allowed board v p ],
+		length valid_positions_for_v == 1,
+		let vp = head valid_positions_for_v
 	]
 
 -----------------------------------------------------------------------------
@@ -338,4 +338,4 @@ run_test =
 				 ((3,4,4),[9]),
 				 ((7,8,8),[5]),
 				 ((8,3,5),[9])]
-		]
+			]
