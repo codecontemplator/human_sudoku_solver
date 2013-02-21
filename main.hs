@@ -7,7 +7,7 @@
 
 import Data.List
 --(`\\`, unlines)
-import Data.Char(ord, chr, digitToInt, intToDigit)
+import Data.Char(digitToInt, intToDigit)
 import Data.Maybe(fromJust, isJust, isNothing)
 import Debug.Trace(trace)
 import Data.List.Split(chunksOf)
@@ -18,7 +18,7 @@ import Data.List.Split(chunksOf)
 
 type Position = (Int,Int,Int)
 type ValueSet = [Int]
-type Cell = (Position,Maybe Int)
+type Cell = (Position,ValueSet)
 type Board = [Cell]
 data Group = Row Int | Col Int | Block Int deriving(Show,Eq)
 type Strategy = Board -> [Cell]
@@ -34,59 +34,32 @@ cell_position :: Cell -> Position
 cell_position = fst
 
 cell_value :: Cell -> Int
-cell_value = fromJust . snd
-
-cell_groups :: Cell -> [Group]
-cell_groups ((c,r,b),_) = Col c : Row r : Block b : []
-
-all_groups :: [Group]
-all_groups = map Row [0..8] ++ map Col [0..8] ++ map Block [0..8]
-
-cells_in_group :: Group -> Board -> [Cell]
-cells_in_group (Row r1) = filter (\((c,r,b),_)->r==r1)
-cells_in_group (Col c1) = filter (\((c,r,b),_)->c==c1)
-cells_in_group (Block b1) = filter (\((c,r,b),_)->b==b1)
-
-split_group_by_distinct :: Group -> Board -> ([Cell],[Cell])
-split_group_by_distinct group board = 
-	partition (\(_,v)->isJust v) (cells_in_group group board)
+cell_value (_, [v]) = v
+cell_value _ = error "cell_value called for non-distinct cell"
 
 is_distinct :: Cell -> Bool
-is_distinct (_,Just _) = True
+is_distinct (_,[_]) = True
 is_distinct _ = False
-
-distincts_in_group :: Board -> Group -> [Cell]
-distincts_in_group board group = filter is_distinct (cells_in_group group board)
-
-positions_in_group :: Group -> [Position]
-positions_in_group (Row r1) = [(c,r,b) | let r=r1, c<-[0..8], let b=get_block c r]
-positions_in_group (Col c1) = [(c,r,b) | let c=c1, r<-[0..8], let b=get_block c r]
-positions_in_group (Block b1) = [(c,r,b) | c<-[0..8], r<-[0..8], let b=get_block c r, b==b1]
-
-all_positions :: [Position]
-all_positions = [(c,r,b) | c <- [0..8], r <- [0..8], let b = get_block c r ]
-
-positions_of_non_distincts :: Board -> [Position]
-positions_of_non_distincts board = [ p | (p,vs) <- board, not(is_distinct (p,vs))]
-
-
-row_values :: Position -> Board -> ValueSet
-row_values (c1,r1,b1) board = map cell_value $ filter (\((c,r,b),_)->c==c1&&r/=r1) $ filter is_distinct board
-
-col_values :: Position -> Board -> ValueSet
-col_values (c1,r1,b1) board = map cell_value $ filter (\((c,r,b),_)->r==r1&&c/=c1) $ filter is_distinct board
-
-block_values :: Position -> Board -> ValueSet
-block_values (c1,r1,b1) board = map cell_value $ filter (\((c,r,b),_)->not(r==r1&&c==c1)&&b1==b) $ filter is_distinct board
 
 is_shared :: Position -> Position -> Bool
 is_shared (c1,r1,b1) (c,r,b) = c==c1&&r/=r1 || r==r1&&c/=c1 || not(r==r1&&c==c1)&&b1==b
 
 is_allowed :: Board -> Int -> Position -> Bool
-is_allowed board value pos = not $ elem value $ row_values pos board ++ col_values pos board ++ block_values pos board 
+is_allowed board value pos = not $ elem value $ [ v | c@(p,[v]) <- board, is_distinct c, is_shared pos p ]
 
 is_complete :: Board -> Bool
-is_complete board = not $ any isNothing $ map snd board
+is_complete board = all is_distinct board
+
+is_group_member :: Group -> Position -> Bool
+is_group_member (Row r1) (r,_,_) = r1 == r
+is_group_member (Col c1) (_,c,_) = c1 == c
+is_group_member (Block b1) (_,_,b) = b1 == b
+
+--group_members :: Group -> [Cell] -> [Cell]
+--group_members g = filter (\(p,_) -> is_group_member g p)
+
+all_groups :: [Group]
+all_groups = map Row [0..8] ++ map Col [0..8] ++ map Block [0..8]
 
 -------------------------------------------------------------------------------------------------
 -- formatting / io
@@ -96,11 +69,11 @@ board2string :: Board -> Bool -> String
 board2string board format =
 	let 
 		cell_positions = concatMap (\r -> map (\c -> (c, r, get_block c r)) [0..8]) [0..8]
-		cell_values = chunksOf 9 $ map (\c -> fromJust (lookup c board)) cell_positions		
-		v2ch :: Maybe Int -> Char
+		cell_values = chunksOf 9 $ map (\p -> fromJust (lookup p board)) cell_positions		
+		v2ch :: ValueSet -> Char
 		v2ch v = case v of
-					Just(v') -> intToDigit v'
-					Nothing -> '.'					
+					[v'] -> intToDigit v'
+					_ -> '.'					
 		formatter = if format then unlines else concat
 	in
 		formatter $ map (\r -> map v2ch r) cell_values
@@ -113,7 +86,7 @@ string2board s = map char2cell (zip [0..] s)
 	where 
 		char2cell (i,ch) = ((c,r,get_block c r), vs)
 			where (c, r) = (i `mod` 9, i `quot` 9)
-			      vs = if ch == '.' then Nothing else Just (ord ch - ord '0')
+			      vs = if ch == '.' then [1..9] else [ digitToInt ch ] -- (ord ch - ord '0')
 
 -------------------------------------------------------------------------------------------------
 -- strategies
@@ -132,10 +105,11 @@ only_choice :: Strategy
 only_choice board = 
     [ (p, v) | 
     	g <- all_groups, 
-    	let (d,nd) = partition is_distinct (cells_in_group g board), 
+    	let gm = [ c | c@(p,_) <- board, is_group_member g p],
+    	let (d,nd) = partition is_distinct gm, 
     	length nd == 1,
     	let [(p,_)] = nd,
-    	let v = Just $ head $ [1..9] \\ (map cell_value d)
+    	let v = [1..9] \\ (map cell_value d)
     ]
 
 --
@@ -151,10 +125,10 @@ only_choice board =
 --
 naked_single :: Strategy
 naked_single board = 
-	[ (p, Just (head vs)) | 
+	[ (p, vs) | 
 		let (d,nd) = partition is_distinct board,
 		(p,_) <- nd,
-		let vs = [1..9] \\ [ v1 | (p1,(Just v1)) <- d, is_shared p p1],
+		let vs = [1..9] \\ [ v1 | (p1,[v1]) <- d, is_shared p p1],
 		length vs == 1 
 	]
 
@@ -173,12 +147,13 @@ naked_single board =
 --
 only_square :: Strategy
 only_square board = concat $
-	[ [(p1,Just(head vs1)), (p2, Just(head vs2))] | 
+	[ [(p1,vs1), (p2, vs2)] | 
 			   g <- all_groups, 
-			   let (d, nd) = partition is_distinct (cells_in_group g board),
+		   	   let gm = [ c | c@(p,_) <- board, is_group_member g p ],
+			   let (d, nd) = partition is_distinct gm,
 			   length nd == 2,			   
 			   (p1,_) <- nd, (p2,_) <- nd, p1 /= p2,	
-			   let vs1 = [1..9] \\ [ fromJust v | c@(p,v) <- board, is_distinct c, is_shared p1 p],
+			   let vs1 = [1..9] \\ [ v | c@(p,[v]) <- board, is_distinct c, is_shared p1 p],
 			   length vs1 == 1,
 			   let vs2 = [1..9] \\ (vs1 ++ (map cell_value d))
 	]
@@ -203,15 +178,15 @@ only_square board = concat $
 --
 two_out_of_three :: Strategy
 two_out_of_three board = nub $
-	[ (vcand, Just v) | 
+	[ (vcand, [v]) | 
 		gset <- [[Row 0, Row 1, Row 2], [Row 3, Row 4, Row 5], [Row 6, Row 7, Row 8],
 		         [Col 0, Col 1, Col 2], [Col 3, Col 4, Col 5], [Col 6, Col 7, Col 8]],
 		v <- [1..9],
 		g1 <- gset, g2 <- gset, g3 <- gset,
 		g1 /= g2, g1 /= g3, g2 /= g3,
-		let g1d = distincts_in_group board g1,
-		let g2d = distincts_in_group board g2,
-		let (g3d, g3nd) = split_group_by_distinct g3 board,
+		let g1d = [ c | c@(p,_) <- board, is_distinct c, is_group_member g1 p ],
+		let g2d = [ c | c@(p,_) <- board, is_distinct c, is_group_member g2 p ],
+		let (g3d, g3nd) = partition is_distinct [ c | c@(p,_) <- board, is_group_member g3 p ],
 		elem v (map cell_value g1d), elem v (map cell_value g2d), not(elem v (map cell_value g3d)),
 		let vcands = filter (is_allowed board v) (map cell_position g3nd),
 		length vcands == 1,
@@ -329,41 +304,38 @@ sampleEasy = string2board $
 -- solve sampleEasy
 -- ... we have a bug...
 
-run_test = not . any (==False) $ 
-	[
-		only_choice sample1 == 
-			[((0,1,0),Just 4)]
-		,
-		naked_single sample2 == 
-			[((0,1,0),Just 9), -- ok
-			 ((2,2,0),Just 3), -- missing on page. validated correct.
-			 ((0,3,3),Just 7), -- ok
-			 ((3,3,4),Just 3), -- ok
-			 ((1,4,3),Just 3), -- ok
-			 ((0,5,3),Just 6), -- ok
-			 ((6,5,5),Just 3), -- ok
-			 ((5,6,7),Just 2), -- ok
-			 ((6,6,8),Just 8), -- ok
-			 ((2,7,6),Just 6)] -- ok
-		,
-		only_square sample3 == 
-			[((2,8,6),Just 1),((2,0,0),Just 3)]
-		,
-		two_out_of_three sample4 == 
-			[((8,1,2),Just 1),
-			 ((6,0,2),Just 3),
-			 ((5,0,1),Just 4),
-			 ((2,3,3),Just 1),
-			 ((2,4,3),Just 3),
-			 ((6,5,5),Just 4),
-			 ((6,4,5),Just 8),
-			 ((3,8,7),Just 2),
-			 ((1,6,6),Just 9),
-			 ((1,0,0),Just 7),
-			 ((5,7,7),Just 5),
-			 ((3,1,1),Just 7),
-			 ((3,4,4),Just 9),
-			 ((7,8,8),Just 5),
-			 ((8,3,5),Just 9)]
-	]
-
+run_test = 
+	let 
+		are_equal a b = a \\ b == [] && b \\ a == []
+	in
+		not . any (==False) $ [
+			are_equal (only_choice sample1) [((0,1,0),[4])],	
+			are_equal (only_square sample3) [((2,8,6),[1]),((2,0,0),[3])],
+			are_equal (naked_single sample2)
+				[((0,1,0),[9]), 
+				 ((2,2,0),[3]), 
+				 ((0,3,3),[7]), 
+				 ((3,3,4),[3]), 
+				 ((1,4,3),[3]), 
+				 ((0,5,3),[6]), 
+				 ((6,5,5),[3]), 
+				 ((5,6,7),[2]), 
+				 ((6,6,8),[8]), 
+				 ((2,7,6),[6])],
+			are_equal (two_out_of_three sample4)
+				[((8,1,2),[1]), 
+				 ((6,0,2),[3]), 
+				 ((5,0,1),[4]), 
+				 ((2,3,3),[1]), 
+				 ((2,4,3),[3]),
+				 ((6,5,5),[4]),
+				 ((6,4,5),[8]),
+				 ((3,8,7),[2]),
+				 ((1,6,6),[9]),
+				 ((1,0,0),[7]),
+				 ((5,7,7),[5]),
+				 ((3,1,1),[7]),
+				 ((3,4,4),[9]),
+				 ((7,8,8),[5]),
+				 ((8,3,5),[9])]
+		]
