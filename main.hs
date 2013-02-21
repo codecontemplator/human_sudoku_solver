@@ -212,15 +212,14 @@ solve_internal board named_strategies =
 		apply_strategies_once board ((name,strategy):rest) =
 			case strategy board of
 				[] -> apply_strategies_once board rest
-				cells -> trace (show cells) $ Just (name, replace_by_position board cells)
+				cells -> Just (name, replace_by_position board cells)
 		apply_strategies :: Board -> [String] -> Maybe([String],Board)
 		apply_strategies board names = 
 			case apply_strategies_once board named_strategies of
 				Just (name, board') -> 
-					trace name $
-						let names' = names ++ [name] in
-						if is_complete board' then Just (names', board') else apply_strategies board' names'
-				_ -> trace (board2string board True) Nothing
+					let names' = names ++ [name] in
+					if is_complete board' then Just (names', board') else apply_strategies board' names'
+				_ -> Nothing
 
 solve  :: Board -> Maybe ([String], Board)
 solve board = solve_internal board strategies
