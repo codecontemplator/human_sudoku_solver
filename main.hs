@@ -11,6 +11,7 @@ import Data.Char(digitToInt, intToDigit)
 import Data.Maybe(fromJust, isJust, isNothing)
 import Debug.Trace(trace)
 import Data.List.Split(chunksOf)
+import Data.Map(fromListWith, toList)
 
 -----------------------------------------------------------------------------
 -- types
@@ -232,6 +233,26 @@ solve board = solve_internal board strategies
 -- test
 -----------------------------------------------------------------------------
 
+is_valid_solution :: Board -> Bool
+is_valid_solution board =
+	let
+		groupBy f xs = toList $ fromListWith (++) [(k', [v]) | (k, v) <- xs, let k' = f k ] 
+		cols = groupBy (\(c,_,_)->c) board
+		rows = groupBy (\(_,r,_)->r) board
+		blks = groupBy (\(_,_,b)->b) board
+	in
+		all is_distinct board &&
+		length cols == 9 &&
+		length rows == 9 &&
+		length blks == 9 &&
+		all (\(_,vs) -> intersect [1..9] (concat vs) == [1..9]) cols &&
+		all (\(_,vs) -> intersect [1..9] (concat vs) == [1..9]) rows &&
+		all (\(_,vs) -> intersect [1..9] (concat vs) == [1..9]) blks
+
+is_valid_solution_ :: Maybe ([String], Board) -> Bool
+is_valid_solution_ (Just (_,board)) = is_valid_solution board
+is_valid_solution_ _ = False
+
 -- puzzle:   ...7...58.56218793......1.........81...376...96.........5........4.2183.87...3...
 -- solution: 123769458456218793789435162347952681518376249962184375235847916694521837871693524
 sample1 :: Board
@@ -272,7 +293,7 @@ sample3 = string2board $
 	"518376..." ++
 	"962184375" ++
 	"..58.7..." ++
-	"684521837" ++
+	"694521837" ++
 	"87.6.35.."
 
 sample4 :: Board
@@ -300,15 +321,12 @@ sampleEasy = string2board $
 	".89.4.712" ++
 	"47..3..5."
 
--- produces invalid solution: 
--- solve sampleEasy
--- ... we have a bug...
-
 run_test = 
 	let 
 		are_equal a b = a \\ b == [] && b \\ a == []
 	in
-		not . any (==False) $ [
+		not . any (==False) $ 
+			[
 			are_equal (only_choice sample1) [((0,1,0),[4])],	
 			are_equal (only_square sample3) [((2,8,6),[1]),((2,0,0),[3])],
 			are_equal (naked_single sample2)
@@ -337,5 +355,10 @@ run_test =
 				 ((3,1,1),[7]),
 				 ((3,4,4),[9]),
 				 ((7,8,8),[5]),
-				 ((8,3,5),[9])]
+				 ((8,3,5),[9])],
+			--is_valid_solution_ (solve sample1), -- could not solve
+			is_valid_solution_ (solve sample2),
+			is_valid_solution_ (solve sample3),
+			is_valid_solution_ (solve sample4),
+			is_valid_solution_ (solve sampleEasy)
 			]
