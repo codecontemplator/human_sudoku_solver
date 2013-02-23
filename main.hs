@@ -6,7 +6,6 @@
 -----------------------------------------------------------------------------
 
 import Data.List
---(`\\`, unlines)
 import Data.Char(digitToInt, intToDigit)
 import Data.Maybe(fromJust, isJust, isNothing)
 import Debug.Trace(trace)
@@ -55,9 +54,6 @@ is_group_member :: Group -> Position -> Bool
 is_group_member (Row r1) (r,_,_) = r1 == r
 is_group_member (Col c1) (_,c,_) = c1 == c
 is_group_member (Block b1) (_,_,b) = b1 == b
-
---group_members :: Group -> [Cell] -> [Cell]
---group_members g = filter (\(p,_) -> is_group_member g p)
 
 all_groups :: [Group]
 all_groups = map Row [0..8] ++ map Col [0..8] ++ map Block [0..8]
