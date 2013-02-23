@@ -51,8 +51,8 @@ is_complete :: Board -> Bool
 is_complete board = all is_distinct board
 
 is_group_member :: Group -> Position -> Bool
-is_group_member (Row r1) (r,_,_) = r1 == r
-is_group_member (Col c1) (_,c,_) = c1 == c
+is_group_member (Col c1) (c,_,_) = c1 == c
+is_group_member (Row r1) (_,r,_) = r1 == r
 is_group_member (Block b1) (_,_,b) = b1 == b
 
 all_groups :: [Group]
@@ -127,6 +127,30 @@ naked_single board =
 		(p,_) <- nd,
 		let vs = [1..9] \\ [ v1 | (p1,[v1]) <- d, is_shared p p1],
 		length vs == 1 
+	]
+
+--
+-- Naked pair
+--
+-- The "naked pair" solving technique is an intermediate solving technique. In this technique the 
+-- Sudoku is scanned for a pair of cells in a row, column or box containing only the same two candidates. 
+-- Since these candidates must go in these cells, they can therefore be removed from the candidate lists 
+-- of all other unsolved cells in that row, column or box. Reducing candidate lists may reveal a hidden 
+-- or naked single in another unsolved cell, generally however the technique is a step to solving the 
+-- next cell. 
+--
+-- ref: http://www.sudoku-solutions.com/solvingNakedSubsets.php#nakedPair
+--
+naked_pair :: Strategy
+naked_pair board = concat $
+	[ reduced |
+		g <- all_groups,
+		let cells_in_g = [ c | c@(p,_) <- board, is_group_member g p ],
+		c1@(p1,vs1) <- cells_in_g, c2@(p2,vs2) <- cells_in_g, p1 < p2,
+		length vs1 == 2, vs1 == vs2,
+		let reducable = (filter (not.is_distinct) cells_in_g) \\ [c1, c2],
+		length reducable > 0,
+		let reduced = map (\(p,vs)->(p,vs\\vs1)) reducable
 	]
 
 --
@@ -219,14 +243,18 @@ propagate_constraints board c@(p,v) =
 		(shared, non_shared) = partition (is_shared p . cell_position) board
 		shared' = map (\(p1,vs) -> (p1, vs \\ v)) shared
 	in
-		shared' ++ non_shared	
+		if length v == 1 then 
+			shared' ++ non_shared
+		else 
+			board
+
+propagate_all_constraints :: Board -> Board
+propagate_all_constraints board = foldl propagate_constraints board (filter is_distinct board)
 
 solve_internal :: Board -> [(String,Strategy)] -> Maybe ([String], Board)
 solve_internal raw_board named_strategies =		
-	apply_strategies (initial_propagate raw_board) []
+	apply_strategies (propagate_all_constraints raw_board) []
 	where
-		initial_propagate :: Board -> Board
-		initial_propagate board = foldl propagate_constraints board (filter is_distinct board)
 		apply_strategies_once :: Board -> [(String,Strategy)] -> Maybe(String,Board)
 		apply_strategies_once board [] = Nothing
 		apply_strategies_once board ((name,strategy):rest) =
@@ -251,7 +279,8 @@ solve board = solve_internal board strategies
 						("only_square", only_square),
 						("two_out_of_three", two_out_of_three),
 						("naked_single", naked_single),
-						("hidden_single", hidden_single)]
+						("hidden_single", hidden_single),
+						("naked_pair", naked_pair)]
 
 -----------------------------------------------------------------------------
 -- test
@@ -276,6 +305,9 @@ is_valid_solution board =
 is_valid_solution_ :: Maybe ([String], Board) -> Bool
 is_valid_solution_ (Just (_,board)) = is_valid_solution board
 is_valid_solution_ _ = False
+
+--string2sample :: String -> Board
+--string2sample = propagate_all_constraints . string2board
 
 -- puzzle:   ...7...58.56218793......1.........81...376...96.........5........4.2183.87...3...
 -- solution: 123769458456218793789435162347952681518376249962184375235847916694521837871693524
@@ -345,6 +377,19 @@ sampleEasy = string2board $
 	".89.4.712" ++
 	"47..3..5."
 
+-- http://www.sudoku-solutions.com/solvingNakedSubsets.php#nakedPair
+sample_naked_pair :: Board
+sample_naked_pair = propagate_all_constraints . string2board $
+	"1.4.9..68" ++
+	"956.18.34" ++
+	"..84.6951" ++
+	"51.....86" ++
+	"8..6...12" ++
+	"64..8..97" ++
+	"781923645" ++
+	"495.6.823" ++
+	".6.854179"
+
 run_test = 
 	let 
 		are_equal a b = a \\ b == [] && b \\ a == []
@@ -380,6 +425,12 @@ run_test =
 				 ((3,4,4),[9]),
 				 ((7,8,8),[5]),
 				 ((8,3,5),[9])],
+			are_equal (naked_pair sample_naked_pair)
+				[((2,4,3),[7,9]),
+				 ((2,3,3),[7,9]),
+				 ((6,5,5),[3,5]),
+				 ((6,4,5),[3,4,5]),
+				 ((6,3,5),[3,4])],
 			is_valid_solution_ (solve sample1),
 			is_valid_solution_ (solve sample2),
 			is_valid_solution_ (solve sample3),
