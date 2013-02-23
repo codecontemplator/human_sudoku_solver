@@ -133,6 +133,25 @@ naked_single board =
 		length vs == 1 
 	]
 
+--
+-- Hidden single 
+--
+-- The hidden single solving technique is a very effective but still simple solving 
+-- technique. Using this technique the candidate values of all empty cells in a given 
+-- row, column and box are determined. If a given candidate value appears in only one 
+-- cell in a row, column or box then that must be the value of the cell. 
+--
+-- ref: http://www.sudoku-solutions.com/solvingHiddenSubsets.php#hiddenSingle
+--
+hidden_single :: Strategy
+hidden_single board = 
+	[ (head hits,[v]) | 
+		g <- all_groups,
+		let cells_in_g = [ c | c@(p,_) <- board, is_group_member g p ],
+		v <- [1..9],
+		let hits = [ p | (p,vs) <- cells_in_g, elem v vs],
+		length hits == 1
+	]
 
 --
 -- Only square (I find no point in using this strategy - use naked single instead)
@@ -235,7 +254,8 @@ solve board = solve_internal board strategies
 	where strategies = [("only_choice",only_choice),
 						("only_square", only_square),
 						("two_out_of_three", two_out_of_three),
-						("naked_single", naked_single)]
+						("naked_single", naked_single),
+						("hidden_single", hidden_single)]
 
 -----------------------------------------------------------------------------
 -- test
@@ -364,7 +384,7 @@ run_test =
 				 ((3,4,4),[9]),
 				 ((7,8,8),[5]),
 				 ((8,3,5),[9])],
-			--is_valid_solution_ (solve sample1), -- could not solve
+			is_valid_solution_ (solve sample1),
 			is_valid_solution_ (solve sample2),
 			is_valid_solution_ (solve sample3),
 			is_valid_solution_ (solve sample4),
