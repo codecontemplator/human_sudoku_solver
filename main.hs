@@ -198,11 +198,6 @@ two_out_of_three board = nub $
 -- solver
 -----------------------------------------------------------------------------
 
-replace_by_position :: Board -> [Cell] -> Board
-replace_by_position board cells = 	
-	let cell_positions = map cell_position cells in
-	[ (p,v) | (p,v) <- board, notElem p cell_positions ] ++ cells
-
 propagate_constraints :: Board -> Cell -> Board
 propagate_constraints board c@(p,v) = 
 	let
@@ -212,15 +207,19 @@ propagate_constraints board c@(p,v) =
 		shared' ++ non_shared	
 
 solve_internal :: Board -> [(String,Strategy)] -> Maybe ([String], Board)
-solve_internal board named_strategies =	
-	apply_strategies board []
+solve_internal raw_board named_strategies =		
+	apply_strategies (initial_propagate raw_board) []
 	where
+		initial_propagate :: Board -> Board
+		initial_propagate board = foldl propagate_constraints board (filter is_distinct board)
 		apply_strategies_once :: Board -> [(String,Strategy)] -> Maybe(String,Board)
 		apply_strategies_once board [] = Nothing
 		apply_strategies_once board ((name,strategy):rest) =
 			case strategy board of
 				[] -> apply_strategies_once board rest
-				cells -> Just (name, replace_by_position board cells)
+				cells -> 
+					let board' = foldl (\b c -> propagate_constraints (replace_by_position b c) c) board cells in
+					Just (name, board')
 		apply_strategies :: Board -> [String] -> Maybe([String],Board)
 		apply_strategies board names = 
 			case apply_strategies_once board named_strategies of
@@ -228,6 +227,8 @@ solve_internal board named_strategies =
 					let names' = names ++ [name] in
 					if is_complete board' then Just (names', board') else apply_strategies board' names'
 				_ -> trace (board2string board False) Nothing
+		replace_by_position :: Board -> Cell -> Board
+		replace_by_position board c@(p,_) = c : filter (\(p1,_) -> p1 /= p) board
 
 solve  :: Board -> Maybe ([String], Board)
 solve board = solve_internal board strategies
