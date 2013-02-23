@@ -25,7 +25,7 @@ data Group = Row Int | Col Int | Block Int deriving(Show,Eq)
 type Strategy = Board -> [Cell]
 
 -----------------------------------------------------------------------------
--- fundamentals
+-- sudoku fundamentals
 -----------------------------------------------------------------------------
 
 get_block :: Int -> Int -> Int
@@ -203,6 +203,14 @@ replace_by_position board cells =
 	let cell_positions = map cell_position cells in
 	[ (p,v) | (p,v) <- board, notElem p cell_positions ] ++ cells
 
+propagate_constraints :: Board -> Cell -> Board
+propagate_constraints board c@(p,v) = 
+	let
+		(shared, non_shared) = partition (is_shared p . cell_position) board
+		shared' = map (\(p1,vs) -> (p1, vs \\ v)) shared
+	in
+		shared' ++ non_shared	
+
 solve_internal :: Board -> [(String,Strategy)] -> Maybe ([String], Board)
 solve_internal board named_strategies =	
 	apply_strategies board []
@@ -219,7 +227,7 @@ solve_internal board named_strategies =
 				Just (name, board') -> 
 					let names' = names ++ [name] in
 					if is_complete board' then Just (names', board') else apply_strategies board' names'
-				_ -> Nothing
+				_ -> trace (board2string board False) Nothing
 
 solve  :: Board -> Maybe ([String], Board)
 solve board = solve_internal board strategies
