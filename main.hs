@@ -11,6 +11,7 @@ import Data.Maybe(fromJust, isJust, isNothing)
 import Debug.Trace(trace)
 import Data.List.Split(chunksOf)
 import Data.Map(fromListWith, toList)
+import Control.Exception(assert)
 
 -----------------------------------------------------------------------------
 -- types
@@ -169,7 +170,7 @@ hidden_single board =
 		g <- all_groups,
 		let cells_in_g = [ c | c@(p,_) <- board, is_group_member g p ],
 		v <- [1..9],
-		let hits = [ p | (p,vs) <- cells_in_g, elem v vs],
+		let hits = [ p | c@(p,vs) <- cells_in_g, not(is_distinct c), elem v vs],
 		length hits == 1
 	]
 
@@ -259,10 +260,10 @@ solve_internal raw_board named_strategies =
 		apply_strategies_once board [] = Nothing
 		apply_strategies_once board ((name,strategy):rest) =
 			case strategy board of
-				[] -> apply_strategies_once board rest
+				[] -> trace ("failed with " ++ name) $ apply_strategies_once board rest
 				cells -> 
 					let board' = foldl (\b c -> propagate_constraints (replace_by_position b c) c) board cells in
-					Just (name, board')
+					trace (name ++ (show cells) ++ "\n" ++ (board2string board False)) (Just (name, board'))
 		apply_strategies :: Board -> [String] -> Maybe([String],Board)
 		apply_strategies board names = 
 			case apply_strategies_once board named_strategies of
@@ -286,8 +287,24 @@ solve board = solve_internal board strategies
 -- test
 -----------------------------------------------------------------------------
 
+is_valid_board :: Board -> Bool
+is_valid_board board = length board == 81 && null duplicates
+	where duplicates = 
+			[ c | 
+				g <- all_groups, 
+				let cells_in_g = [ c | c@(p,_)<-board, is_distinct c, is_group_member g p],
+				c@(p,[v]) <- cells_in_g, c'@(p',[v']) <- cells_in_g,
+				p /= p', v == v'
+			]
+
+is_finished_board :: Board -> Bool
+is_finished_board = all is_distinct
+
 is_valid_solution :: Board -> Bool
-is_valid_solution board =
+is_valid_solution board = is_valid_board board && is_finished_board board
+
+{-
+is_valid_solution board = 
 	let
 		groupBy f xs = toList $ fromListWith (++) [(k', [v]) | (k, v) <- xs, let k' = f k ] 
 		cols = groupBy (\(c,_,_)->c) board
@@ -301,6 +318,7 @@ is_valid_solution board =
 		all (\(_,vs) -> intersect [1..9] (concat vs) == [1..9]) cols &&
 		all (\(_,vs) -> intersect [1..9] (concat vs) == [1..9]) rows &&
 		all (\(_,vs) -> intersect [1..9] (concat vs) == [1..9]) blks
+-}
 
 is_valid_solution_ :: Maybe ([String], Board) -> Bool
 is_valid_solution_ (Just (_,board)) = is_valid_solution board
@@ -311,8 +329,8 @@ is_valid_solution_ _ = False
 
 -- puzzle:   ...7...58.56218793......1.........81...376...96.........5........4.2183.87...3...
 -- solution: 123769458456218793789435162347952681518376249962184375235847916694521837871693524
-sample1 :: Board
-sample1 = string2board $ 
+sample_only_choice :: Board
+sample_only_choice = string2board $ 
 	"...7...58" ++
 	".56218793" ++
 	"......1.." ++
@@ -323,13 +341,14 @@ sample1 = string2board $
 	"..4.2183." ++
 	"87...3..."
 
+
 -- puzzle:   825631974.67.24..84....76.2.59.482611.8269745.4.175.8.3.14.....5....34..294..65..
 -- solution: 825631974967524138413897652759348261138269745642175389371452896586913427294786513
 -- rated: very easy by http://www.sudoku-solutions.com/
 -- can be solved using single possibily only
 -- test ok: displayBoard $ snd $ fromJust $ solve_internal sample2 [("singlePossibility", singlePossibility)]
-sample2 :: Board
-sample2 = string2board $
+sample_naked_single :: Board
+sample_naked_single = string2board $
 	"825631974" ++
 	".67.24..8" ++
 	"4....76.2" ++
@@ -340,8 +359,8 @@ sample2 = string2board $
 	"5....34.." ++
 	"294..65.."
 
-sample3 :: Board
-sample3 = string2board $
+sample_only_square :: Board
+sample_only_square = string2board $
 	"...769458" ++
 	"456218793" ++
 	"7894351.." ++
@@ -352,8 +371,8 @@ sample3 = string2board $
 	"694521837" ++
 	"87.6.35.."
 
-sample4 :: Board
-sample4 = string2board $
+sample_two_out_of_three :: Board
+sample_two_out_of_three = string2board $
 	"..951..62" ++
 	"634...59." ++
 	"1256397.4" ++
@@ -365,8 +384,8 @@ sample4 = string2board $
 	"74..961.."
 
 -- http://www.svd.se/kultur/spel/sudoku/
-sampleEasy :: Board
-sampleEasy = string2board $
+sample_easy :: Board
+sample_easy = string2board $
 	"26.81.3.." ++
 	"5.47.9..." ++ 
 	"......4.6" ++
@@ -394,11 +413,11 @@ run_test =
 	let 
 		are_equal a b = a \\ b == [] && b \\ a == []
 	in
-		not . any (==False) $ 
+		--not . any (==False) $ 
 			[
-			are_equal (only_choice sample1) [((0,1,0),[4])],	
-			are_equal (only_square sample3) [((2,8,6),[1]),((2,0,0),[3])],
-			are_equal (naked_single sample2)
+			are_equal (only_choice sample_only_choice) [((0,1,0),[4])],	
+			are_equal (only_square sample_only_square) [((2,8,6),[1]),((2,0,0),[3])],
+			are_equal (naked_single sample_naked_single)
 				[((0,1,0),[9]), 
 				 ((2,2,0),[3]), 
 				 ((0,3,3),[7]), 
@@ -409,7 +428,7 @@ run_test =
 				 ((5,6,7),[2]), 
 				 ((6,6,8),[8]), 
 				 ((2,7,6),[6])],
-			are_equal (two_out_of_three sample4)
+			are_equal (two_out_of_three sample_two_out_of_three)
 				[((8,1,2),[1]), 
 				 ((6,0,2),[3]), 
 				 ((5,0,1),[4]), 
@@ -431,9 +450,12 @@ run_test =
 				 ((6,5,5),[3,5]),
 				 ((6,4,5),[3,4,5]),
 				 ((6,3,5),[3,4])],
-			is_valid_solution_ (solve sample1),
-			is_valid_solution_ (solve sample2),
-			is_valid_solution_ (solve sample3),
-			is_valid_solution_ (solve sample4),
-			is_valid_solution_ (solve sampleEasy)
+			is_valid_solution_ (solve sample_only_choice),
+			is_valid_solution_ (solve sample_only_square),
+			is_valid_solution_ (solve sample_naked_single),
+			is_valid_solution_ (solve sample_two_out_of_three),
+			is_valid_solution_ (solve sample_naked_pair),
+			is_valid_solution_ (solve sample_easy)
 			]
+
+-- solve sample_only_choice -> produced invalid board and hangs
