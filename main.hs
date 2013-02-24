@@ -297,11 +297,8 @@ is_valid_board board = length board == 81 && null duplicates
 				p /= p', v == v'
 			]
 
-is_finished_board :: Board -> Bool
-is_finished_board = all is_distinct
-
 is_valid_solution :: Board -> Bool
-is_valid_solution board = is_valid_board board && is_finished_board board
+is_valid_solution board = is_valid_board board && is_complete board
 
 {-
 is_valid_solution board = 
