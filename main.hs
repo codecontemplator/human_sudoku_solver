@@ -239,6 +239,9 @@ two_out_of_three board = nub $
 -- solver
 -----------------------------------------------------------------------------
 
+type SolveState = (Board,[String])
+type StrategyDef = (String,Strategy)
+
 propagate_constraints :: Board -> Cell -> Board
 propagate_constraints board c@(p,v) = 
 	let
@@ -253,94 +256,59 @@ propagate_constraints board c@(p,v) =
 propagate_all_constraints :: Board -> Board
 propagate_all_constraints board = foldl propagate_constraints board (filter is_distinct board)
 
-{-
-solve_internal :: Board -> [(String,Strategy)] -> Maybe ([String], Board)
-solve_internal raw_board named_strategies =		
-	apply_strategies (propagate_all_constraints raw_board) []
-	where
-		apply_strategies_once :: Board -> [(String,Strategy)] -> Maybe(String,Board)
-		apply_strategies_once board [] = Nothing
-		apply_strategies_once board ((name,strategy):rest) =
-			case strategy board of
-				[] -> trace ("failed with " ++ name) $ apply_strategies_once board rest
-				cells -> 
-					let board' = foldl (\b c -> propagate_constraints (replace_by_position b c) c) board cells in
-					trace (name ++ (show cells) ++ "\n" ++ (board2string board False)) (Just (name, board'))
-		apply_strategies :: Board -> [String] -> Maybe([String],Board)
-		apply_strategies board names = 
-			case apply_strategies_once board named_strategies of
-				Just (name, board') -> 
-					let names' = names ++ [name] in
-					if is_complete board' then Just (names', board') else apply_strategies board' names'
-				_ -> trace (board2string board False) Nothing
-		replace_by_position :: Board -> Cell -> Board
-		replace_by_position board c@(p,_) = c : filter (\(p1,_) -> p1 /= p) board
--}
-
-
-{-
-solve initial_board all_strategies =
-	solve' board [] = Nothing
-	solve' board (strategy:strategies) =
-		if is_complete board then
-			Just board
-		else 
-			case strategy board of
-				[] -> solve' board strategies
-				solved_cells -> 
-					let board' = foldl (\b c -> propagate_constraints (update_cell b c) c) board solved_cells
-					in solve' board' all_strategies
-
--}
-
-type SolveState = Board
-
-apply_strategy :: Strategy -> State SolveState [Cell]
-apply_strategy strategy = gets strategy
---	board <- get
---	return $ strategy board
+apply_strategy :: StrategyDef -> State SolveState [Cell]
+apply_strategy (_,strategy) = gets (strategy.fst)
 
 update_cell :: Cell -> State SolveState ()
-update_cell c@(p,_) = modify $ \board -> c : filter (\(p1,_) -> p1 /= p) board
+update_cell c@(p,_) = modify $ \(board,actions) -> (c : filter (\(p1,_) -> p1 /= p) board, actions)
 
 propagate_constraintsM :: Cell -> State SolveState ()
-propagate_constraintsM cell = modify $ \board -> propagate_constraints board cell
+propagate_constraintsM cell = modify $ \(board,actions) -> (propagate_constraints board cell, actions)
 
 update_solution :: [Cell] -> State SolveState ()
-update_solution solved_cells = do
-	board <- get
-	forM_ solved_cells (update_cell >> propagate_constraintsM)
+update_solution solved_cells =
+	forM_ solved_cells (propagate_constraintsM >> update_cell)
 
-solveM :: [Strategy] -> State SolveState Bool
+record_action :: StrategyDef -> [Cell] -> State SolveState ()
+record_action (name,_) solved_cells = modify $ \(board,actions) -> (board,actions++[name])
+
+solveM :: [StrategyDef] -> State SolveState Bool
 solveM all_strategies =
 	let
 		solve' [] = return False		
 		solve' (strategy:strategies) = do
-			solved <- gets is_complete
+			solved <- gets (is_complete.fst)
 			if solved then
 				return True
 			else do
-				solved_cells <- apply_strategy strategy
+				solved_cells <- apply_strategy strategy				
 				if null solved_cells then
 					solve' strategies
 				else do
+					record_action strategy solved_cells
 					update_solution solved_cells
 					solve' all_strategies
 	in
 		solve' all_strategies
 
-solveM2 :: [Strategy] -> State SolveState (Maybe ([String], Board))
+solveM2 :: [StrategyDef] -> State SolveState (Maybe ([String], Board))
 solveM2 all_strategies = do
 	solved <- solveM all_strategies
-	board <- get
+	(board,actions) <- get
 	if solved then
-		return $ Just (["not supported yet"],board)
+		return $ Just (actions,board)
 	else
 		return Nothing
 
 solve  :: Board -> Maybe ([String], Board)
-solve board = evalState (solveM2 strategies) board
-	where strategies = [only_choice, only_square, two_out_of_three, naked_single, hidden_single, naked_pair]
+solve board = evalState (solveM2 strategies) (board,[])
+	where strategies = 
+		[("only_choice",only_choice), 
+		 ("only_square", only_square), 
+		 ("two_out_of_three", two_out_of_three), 
+		 ("naked_single", naked_single), 
+		 ("hidden_single", hidden_single), 
+		 ("naked_pair", naked_pair)]
 
 -----------------------------------------------------------------------------
 -- test
