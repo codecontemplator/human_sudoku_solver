@@ -256,6 +256,24 @@ propagate_constraints board c@(p,v) =
 propagate_all_constraints :: Board -> Board
 propagate_all_constraints board = foldl propagate_constraints board (filter is_distinct board)
 
+is_valid_board :: Board -> Bool
+is_valid_board board = length board == 81 && null duplicates
+	where duplicates = 
+			[ c | 
+				g <- all_groups, 
+				let cells_in_g = [ c | c@(p,_)<-board, is_distinct c, is_group_member g p],
+				c@(p,[v]) <- cells_in_g, c'@(p',[v']) <- cells_in_g,
+				p /= p', v == v'
+			]
+
+validate_state :: State SolveState ()
+validate_state = do
+	(board, _) <- get
+	if is_valid_board board then
+		return ()
+	else
+		error "State is invalid."
+
 apply_strategy :: StrategyDef -> State SolveState [Cell]
 apply_strategy (_,strategy) = gets (strategy.fst)
 
@@ -266,11 +284,14 @@ propagate_constraintsM :: Cell -> State SolveState ()
 propagate_constraintsM cell = modify $ \(board,actions) -> (propagate_constraints board cell, actions)
 
 update_solution :: [Cell] -> State SolveState ()
-update_solution solved_cells =
+update_solution solved_cells = do
 	forM_ solved_cells (propagate_constraintsM >> update_cell)
+	validate_state
 
 record_action :: StrategyDef -> [Cell] -> State SolveState ()
-record_action (name,_) solved_cells = modify $ \(board,actions) -> (board,actions++[name])
+record_action (name,_) solved_cells = do
+		board <- gets fst
+		trace (name ++ ":" ++ (show solved_cells) ++ ";\n" ++ (board2string board True)) modify $ \(board,actions) -> (board,actions++[name])
 
 solveM :: [StrategyDef] -> State SolveState Bool
 solveM all_strategies =
@@ -291,17 +312,14 @@ solveM all_strategies =
 	in
 		solve' all_strategies
 
-solveM2 :: [StrategyDef] -> State SolveState (Maybe ([String], Board))
+solveM2 :: [StrategyDef] -> State SolveState (Bool, Board, [String])
 solveM2 all_strategies = do
 	solved <- solveM all_strategies
 	(board,actions) <- get
-	if solved then
-		return $ Just (actions,board)
-	else
-		return Nothing
+	return (solved,board,actions)
 
-solve  :: Board -> Maybe ([String], Board)
-solve board = evalState (solveM2 strategies) (board,[])
+solve  :: Board -> (Bool, Board, [String])
+solve board = evalState (solveM2 strategies) (propagate_all_constraints board,[])
 	where strategies = 
 		[("only_choice",only_choice), 
 		 ("only_square", only_square), 
@@ -313,16 +331,6 @@ solve board = evalState (solveM2 strategies) (board,[])
 -----------------------------------------------------------------------------
 -- test
 -----------------------------------------------------------------------------
-
-is_valid_board :: Board -> Bool
-is_valid_board board = length board == 81 && null duplicates
-	where duplicates = 
-			[ c | 
-				g <- all_groups, 
-				let cells_in_g = [ c | c@(p,_)<-board, is_distinct c, is_group_member g p],
-				c@(p,[v]) <- cells_in_g, c'@(p',[v']) <- cells_in_g,
-				p /= p', v == v'
-			]
 
 is_valid_solution :: Board -> Bool
 is_valid_solution board = is_valid_board board && is_complete board
@@ -344,8 +352,8 @@ is_valid_solution board =
 		all (\(_,vs) -> intersect [1..9] (concat vs) == [1..9]) blks
 -}
 
-is_valid_solution_ :: Maybe ([String], Board) -> Bool
-is_valid_solution_ (Just (_,board)) = is_valid_solution board
+is_valid_solution_ :: (Bool, Board, [String]) -> Bool
+is_valid_solution_ (True, board, _) = is_valid_solution board
 is_valid_solution_ _ = False
 
 --string2sample :: String -> Board
