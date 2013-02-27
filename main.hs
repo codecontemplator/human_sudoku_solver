@@ -167,13 +167,18 @@ naked_pair board = concat $
 --
 hidden_single :: Strategy
 hidden_single board = 
-	[ (head hits,[v]) | 
-		g <- all_groups,
-		let empty_cells_in_g = [ c | c@(p,_) <- board, is_group_member g p, not(is_distinct c) ],
-		v <- [1..9],
-		let hits = [ p | c@(p,vs) <- empty_cells_in_g, elem v vs],
-		length hits == 1
-	]
+	let 
+		full_info = 
+			[ ((head hits,[v]),(g,empty_cells_in_g,hits,[ c | c@(p,_) <- board, is_group_member g p, is_distinct c])) | 
+				g <- all_groups,
+				let (filled_cells_in_g, empty_cells_in_g) = partition is_distinct [ c | c@(p,_) <- board, is_group_member g p ],
+				let selected_vs = map cell_value filled_cells_in_g,
+				v <- [1..9],
+				let hits = [ p | c@(p,vs) <- empty_cells_in_g, elem v vs, not (elem v selected_vs)],
+				length hits == 1
+			]
+	in
+		trace ("hidden single, full info " ++ show full_info) (map fst full_info)
 
 --
 -- Only square (I find no point in using this strategy - use naked single instead)
