@@ -239,23 +239,14 @@ two_out_of_three board = nub $
 -- solver
 -----------------------------------------------------------------------------
 
-type SolveState = (Board,[String],Board)
-type StrategyDef = (String,Strategy)
-
-state_to_board :: SolveState -> Board
-state_to_board (board,_,_) = board
-
-state_to_actions :: SolveState -> [String]
-state_to_actions (_, actions, _) = actions
-
-state_to_solution :: SolveState -> Board
-state_to_solution (_, _, solution) = solution
+data SolveState = SolveState { state_to_board :: Board, state_to_actions :: [String], state_to_solution :: Board }
+data StrategyDef = StrategyDef { strategy_to_name :: String, strategy_to_functor :: Strategy }
 
 modify_board :: (Board -> Board) -> State SolveState ()
-modify_board f = modify $ \(board,actions,solution) -> (f board, actions, solution)
+modify_board f = modify $ \(SolveState board actions solution) -> SolveState (f board) actions solution
 
 modify_actions :: ([String] -> [String]) -> State SolveState ()
-modify_actions f = modify $ \(board,actions,solution) -> (board, f actions, solution)
+modify_actions f = modify $ \(SolveState board actions solution) -> SolveState board (f actions) solution
 
 propagate_constraints :: Board -> Cell -> Board
 propagate_constraints board c@(p,v) = 
@@ -316,7 +307,7 @@ validate_state = do
 		error "State is invalid."
 
 apply_strategy :: StrategyDef -> State SolveState [Cell]
-apply_strategy (_,strategy) = gets (strategy.state_to_board)
+apply_strategy strategy = gets (strategy_to_functor strategy.state_to_board)
 
 update_cell :: Cell -> State SolveState ()
 update_cell c@(p,_) = modify_board $ \board -> c : filter (\(p1,_) -> p1 /= p) board
@@ -337,9 +328,9 @@ update_solution solved_cells =
 		trace ("after constraint propagation:" ++ show cell ++ ";\n" ++ (board2string board'' False)) validate_state
 						
 record_action :: StrategyDef -> [Cell] -> State SolveState ()
-record_action (name,_) solved_cells = do
+record_action strategy solved_cells = do
 		board <- gets state_to_board
-		modify_actions $ \actions -> actions++[name]
+		modify_actions $ \actions -> actions++[strategy_to_name strategy]
 
 solveM :: [StrategyDef] -> State SolveState Bool
 solveM all_strategies =
@@ -354,7 +345,7 @@ solveM all_strategies =
 				if null solved_cells then
 					solve' strategies
 				else do
-					trace ("strategy " ++ fst strategy ++ " applied successfully. cells=" ++ show solved_cells) record_action strategy solved_cells
+					trace ("strategy " ++ strategy_to_name strategy ++ " applied successfully. cells=" ++ show solved_cells) record_action strategy solved_cells
 					update_solution solved_cells
 					solve' all_strategies
 	in
@@ -363,19 +354,20 @@ solveM all_strategies =
 solveM2 :: [StrategyDef] -> State SolveState (Bool, Board, [String])
 solveM2 all_strategies = do
 	solved <- solveM all_strategies
-	(board,actions,_) <- get
+	board <- gets state_to_board
+	actions <- gets state_to_actions
 	return (solved,board,actions)
 
 solve  :: Board -> (Bool, Board, [String])
-solve board = evalState (solveM2 strategies) (propagate_all_constraints board,[],solution)
+solve board = evalState (solveM2 strategies) (SolveState (propagate_all_constraints board) [] solution)
 	where 
 		strategies = 
-			[("only_choice",only_choice), 
-			 ("only_square", only_square), 
-			 ("two_out_of_three", two_out_of_three), 
-			 ("naked_single", naked_single), 
-			 ("hidden_single", hidden_single), 
-			 ("naked_pair", naked_pair)]
+			[(StrategyDef "only_choice" only_choice), 
+			 (StrategyDef "only_square" only_square), 
+			 (StrategyDef "two_out_of_three" two_out_of_three), 
+			 (StrategyDef "naked_single" naked_single), 
+			 (StrategyDef "hidden_single" hidden_single), 
+			 (StrategyDef "naked_pair" naked_pair)]
 		solution = case brute_force_solve board of { [x] -> x; _ -> error "board is not well defined"; }
 
 -----------------------------------------------------------------------------
@@ -385,29 +377,9 @@ solve board = evalState (solveM2 strategies) (propagate_all_constraints board,[]
 is_valid_solution :: Board -> Bool
 is_valid_solution board = is_valid_board board Nothing && is_complete board
 
-{-
-is_valid_solution board = 
-	let
-		groupBy f xs = toList $ fromListWith (++) [(k', [v]) | (k, v) <- xs, let k' = f k ] 
-		cols = groupBy (\(c,_,_)->c) board
-		rows = groupBy (\(_,r,_)->r) board
-		blks = groupBy (\(_,_,b)->b) board
-	in
-		all is_distinct board &&
-		length cols == 9 &&
-		length rows == 9 &&
-		length blks == 9 &&
-		all (\(_,vs) -> intersect [1..9] (concat vs) == [1..9]) cols &&
-		all (\(_,vs) -> intersect [1..9] (concat vs) == [1..9]) rows &&
-		all (\(_,vs) -> intersect [1..9] (concat vs) == [1..9]) blks
--}
-
 is_valid_solution_ :: (Bool, Board, [String]) -> Bool
 is_valid_solution_ (True, board, _) = is_valid_solution board
 is_valid_solution_ _ = False
-
---string2sample :: String -> Board
---string2sample = propagate_all_constraints . string2board
 
 -- puzzle:   ...7...58.56218793......1.........81...376...96.........5........4.2183.87...3...
 -- solution: 123769458456218793789435162347952681518376249962184375235847916694521837871693524
