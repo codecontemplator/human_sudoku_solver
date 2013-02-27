@@ -169,9 +169,9 @@ hidden_single :: Strategy
 hidden_single board = 
 	[ (head hits,[v]) | 
 		g <- all_groups,
-		let cells_in_g = [ c | c@(p,_) <- board, is_group_member g p ],
+		let empty_cells_in_g = [ c | c@(p,_) <- board, is_group_member g p, not(is_distinct c) ],
 		v <- [1..9],
-		let hits = [ p | c@(p,vs) <- cells_in_g, not(is_distinct c), elem v vs],
+		let hits = [ p | c@(p,vs) <- empty_cells_in_g, elem v vs],
 		length hits == 1
 	]
 
@@ -284,14 +284,21 @@ propagate_constraintsM :: Cell -> State SolveState ()
 propagate_constraintsM cell = modify $ \(board,actions) -> (propagate_constraints board cell, actions)
 
 update_solution :: [Cell] -> State SolveState ()
-update_solution solved_cells = do
-	forM_ solved_cells (propagate_constraintsM >> update_cell)
-	validate_state
-
+update_solution solved_cells =
+	forM_ solved_cells $ \cell -> do --(propagate_constraintsM >> update_cell)
+		board <- gets fst
+		trace ("before update:" ++ show cell ++ ";\n" ++ (board2string board False)) validate_state
+		update_cell cell
+		board' <- gets fst
+		trace ("after cell update:" ++ show cell ++ ";\n" ++ (board2string board' False)) validate_state
+		propagate_constraintsM cell
+		board'' <- gets fst
+		trace ("after constraint propagation:" ++ show cell ++ ";\n" ++ (board2string board'' False)) validate_state
+			
 record_action :: StrategyDef -> [Cell] -> State SolveState ()
 record_action (name,_) solved_cells = do
 		board <- gets fst
-		trace (name ++ ":" ++ (show solved_cells) ++ ";\n" ++ (board2string board True)) modify $ \(board,actions) -> (board,actions++[name])
+		modify $ \(board,actions) -> (board,actions++[name])
 
 solveM :: [StrategyDef] -> State SolveState Bool
 solveM all_strategies =
@@ -306,7 +313,7 @@ solveM all_strategies =
 				if null solved_cells then
 					solve' strategies
 				else do
-					record_action strategy solved_cells
+					trace ("strategy " ++ fst strategy ++ " applied successfully. cells=" ++ show solved_cells) record_action strategy solved_cells
 					update_solution solved_cells
 					solve' all_strategies
 	in
