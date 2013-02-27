@@ -239,8 +239,23 @@ two_out_of_three board = nub $
 -- solver
 -----------------------------------------------------------------------------
 
-type SolveState = (Board,[String])
+type SolveState = (Board,[String],Board)
 type StrategyDef = (String,Strategy)
+
+state_to_board :: SolveState -> Board
+state_to_board (board,_,_) = board
+
+state_to_actions :: SolveState -> [String]
+state_to_actions (_, actions, _) = actions
+
+state_to_solution :: SolveState -> Board
+state_to_solution (_, _, solution) = solution
+
+modify_board :: (Board -> Board) -> State SolveState ()
+modify_board f = modify $ \(board,actions,solution) -> (f board, actions, solution)
+
+modify_actions :: ([String] -> [String]) -> State SolveState ()
+modify_actions f = modify $ \(board,actions,solution) -> (board, f actions, solution)
 
 propagate_constraints :: Board -> Cell -> Board
 propagate_constraints board c@(p,v) = 
@@ -256,56 +271,82 @@ propagate_constraints board c@(p,v) =
 propagate_all_constraints :: Board -> Board
 propagate_all_constraints board = foldl propagate_constraints board (filter is_distinct board)
 
-is_valid_board :: Board -> Bool
-is_valid_board board = length board == 81 && null duplicates
-	where duplicates = 
+brute_force_solve :: Board -> [Board]
+brute_force_solve board =
+	let 
+		board' = propagate_all_constraints board
+		least_ambiguous_cell@(p,vs) = head $ sortBy (\(_,vs1) (_,vs2)->compare (length vs1) (length vs2)) (filter (not.is_distinct) board')
+		candidates = map (\v -> (p,[v])) vs
+		update_cell b c = c : filter (\(p1,_) -> p1 /= p) b
+		boards = map (update_cell board') candidates
+	in
+		if is_complete board' then
+			[board']
+		else
+			concatMap brute_force_solve boards
+
+is_valid_board :: Board -> Maybe Board -> Bool
+is_valid_board board maybe_solution = length board == 81 && null duplicates && test_candiates
+	where 
+		duplicates = 
 			[ c | 
 				g <- all_groups, 
 				let cells_in_g = [ c | c@(p,_)<-board, is_distinct c, is_group_member g p],
 				c@(p,[v]) <- cells_in_g, c'@(p',[v']) <- cells_in_g,
 				p /= p', v == v'
 			]
+		test_candiates = case maybe_solution of 
+							Just solution -> 
+								let 
+									find_cell_value :: Position -> Int
+									find_cell_value p = head $ snd $ fromJust $ find (\(p1,_)->p==p1) solution
+									is_valid_candidate :: Cell -> Bool
+									is_valid_candidate (p,vs) = elem (find_cell_value p) vs
+								in
+									all is_valid_candidate board
+							Nothing -> True
 
 validate_state :: State SolveState ()
 validate_state = do
-	(board, _) <- get
-	if is_valid_board board then
+	board <- gets state_to_board
+	solution <- gets state_to_solution
+	if is_valid_board board (Just solution) then
 		return ()
 	else
 		error "State is invalid."
 
 apply_strategy :: StrategyDef -> State SolveState [Cell]
-apply_strategy (_,strategy) = gets (strategy.fst)
+apply_strategy (_,strategy) = gets (strategy.state_to_board)
 
 update_cell :: Cell -> State SolveState ()
-update_cell c@(p,_) = modify $ \(board,actions) -> (c : filter (\(p1,_) -> p1 /= p) board, actions)
+update_cell c@(p,_) = modify_board $ \board -> c : filter (\(p1,_) -> p1 /= p) board
 
 propagate_constraintsM :: Cell -> State SolveState ()
-propagate_constraintsM cell = modify $ \(board,actions) -> (propagate_constraints board cell, actions)
+propagate_constraintsM cell = modify_board $ \board -> propagate_constraints board cell
 
 update_solution :: [Cell] -> State SolveState ()
 update_solution solved_cells =
 	forM_ solved_cells $ \cell -> do --(propagate_constraintsM >> update_cell)
-		board <- gets fst
+		board <- gets state_to_board
 		trace ("before update:" ++ show cell ++ ";\n" ++ (board2string board False)) validate_state
 		update_cell cell
-		board' <- gets fst
+		board' <- gets state_to_board
 		trace ("after cell update:" ++ show cell ++ ";\n" ++ (board2string board' False)) validate_state
 		propagate_constraintsM cell
-		board'' <- gets fst
+		board'' <- gets state_to_board
 		trace ("after constraint propagation:" ++ show cell ++ ";\n" ++ (board2string board'' False)) validate_state
-			
+						
 record_action :: StrategyDef -> [Cell] -> State SolveState ()
 record_action (name,_) solved_cells = do
-		board <- gets fst
-		modify $ \(board,actions) -> (board,actions++[name])
+		board <- gets state_to_board
+		modify_actions $ \actions -> actions++[name]
 
 solveM :: [StrategyDef] -> State SolveState Bool
 solveM all_strategies =
 	let
 		solve' [] = return False		
 		solve' (strategy:strategies) = do
-			solved <- gets (is_complete.fst)
+			solved <- gets (is_complete.state_to_board)
 			if solved then
 				return True
 			else do
@@ -322,25 +363,27 @@ solveM all_strategies =
 solveM2 :: [StrategyDef] -> State SolveState (Bool, Board, [String])
 solveM2 all_strategies = do
 	solved <- solveM all_strategies
-	(board,actions) <- get
+	(board,actions,_) <- get
 	return (solved,board,actions)
 
 solve  :: Board -> (Bool, Board, [String])
-solve board = evalState (solveM2 strategies) (propagate_all_constraints board,[])
-	where strategies = 
-		[("only_choice",only_choice), 
-		 ("only_square", only_square), 
-		 ("two_out_of_three", two_out_of_three), 
-		 ("naked_single", naked_single), 
-		 ("hidden_single", hidden_single), 
-		 ("naked_pair", naked_pair)]
+solve board = evalState (solveM2 strategies) (propagate_all_constraints board,[],solution)
+	where 
+		strategies = 
+			[("only_choice",only_choice), 
+			 ("only_square", only_square), 
+			 ("two_out_of_three", two_out_of_three), 
+			 ("naked_single", naked_single), 
+			 ("hidden_single", hidden_single), 
+			 ("naked_pair", naked_pair)]
+		solution = case brute_force_solve board of { [x] -> x; _ -> error "board is not well defined"; }
 
 -----------------------------------------------------------------------------
 -- test
 -----------------------------------------------------------------------------
 
 is_valid_solution :: Board -> Bool
-is_valid_solution board = is_valid_board board && is_complete board
+is_valid_solution board = is_valid_board board Nothing && is_complete board
 
 {-
 is_valid_solution board = 
