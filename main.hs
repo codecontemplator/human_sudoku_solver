@@ -167,18 +167,13 @@ naked_pair board = concat $
 --
 hidden_single :: Strategy
 hidden_single board = 
-	let 
-		full_info = 
-			[ ((head hits,[v]),(g,empty_cells_in_g,hits,[ c | c@(p,_) <- board, is_group_member g p, is_distinct c])) | 
-				g <- all_groups,
-				let (filled_cells_in_g, empty_cells_in_g) = partition is_distinct [ c | c@(p,_) <- board, is_group_member g p ],
-				let selected_vs = map cell_value filled_cells_in_g,
-				v <- [1..9],
-				let hits = [ p | c@(p,vs) <- empty_cells_in_g, elem v vs, not (elem v selected_vs)],
-				length hits == 1
-			]
-	in
-		trace ("hidden single, full info " ++ show full_info) (map fst full_info)
+	[ (head hits,[v]) | 
+		g <- all_groups,
+		let empty_cells_in_g = [ c | c@(p,_) <- board, is_group_member g p, not(is_distinct c) ],
+		v <- [1..9],
+		let hits = [ p | c@(p,vs) <- empty_cells_in_g, elem v vs, is_allowed board v p],
+		length hits == 1
+	]
 
 --
 -- Only square (I find no point in using this strategy - use naked single instead)
@@ -500,7 +495,7 @@ run_test =
 	let 
 		are_equal a b = a \\ b == [] && b \\ a == []
 	in
-		--not . any (==False) $ 
+		not . any (==False) $ 
 			[
 			are_equal (only_choice sample_only_choice) [((0,1,0),[4])],	
 			are_equal (only_square sample_only_square) [((2,8,6),[1]),((2,0,0),[3])],
@@ -544,5 +539,3 @@ run_test =
 			is_valid_solution_ (solve sample_naked_pair),
 			is_valid_solution_ (solve sample_easy)
 			]
-
--- solve sample_only_choice -> produced invalid board and hangs
