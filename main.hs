@@ -351,15 +351,17 @@ solveM all_strategies =
 	in
 		solve' all_strategies
 
+{-
 solveM2 :: [StrategyDef] -> State SolveState (Bool, Board, [String])
 solveM2 all_strategies = do
 	solved <- solveM all_strategies
 	board <- gets state_to_board
 	actions <- gets state_to_actions
 	return (solved,board,actions)
+-}
 
-solve  :: Board -> (Bool, Board, [String])
-solve board = evalState (solveM2 strategies) (SolveState (propagate_all_constraints board) [] solution)
+solve  :: Board -> (Bool, SolveState)
+solve board = runState (solveM strategies) (SolveState board' [] solution)
 	where 
 		strategies = 
 			[(StrategyDef "only_choice" only_choice), 
@@ -368,6 +370,7 @@ solve board = evalState (solveM2 strategies) (SolveState (propagate_all_constrai
 			 (StrategyDef "naked_single" naked_single), 
 			 (StrategyDef "hidden_single" hidden_single), 
 			 (StrategyDef "naked_pair" naked_pair)]
+		board' = propagate_all_constraints board
 		solution = case brute_force_solve board of { [x] -> x; _ -> error "board is not well defined"; }
 
 -----------------------------------------------------------------------------
@@ -377,8 +380,8 @@ solve board = evalState (solveM2 strategies) (SolveState (propagate_all_constrai
 is_valid_solution :: Board -> Bool
 is_valid_solution board = is_valid_board board Nothing && is_complete board
 
-is_valid_solution_ :: (Bool, Board, [String]) -> Bool
-is_valid_solution_ (True, board, _) = is_valid_solution board
+is_valid_solution_ :: (Bool, SolveState) -> Bool
+is_valid_solution_ (True, state) = is_valid_solution $ state_to_board state
 is_valid_solution_ _ = False
 
 -- puzzle:   ...7...58.56218793......1.........81...376...96.........5........4.2183.87...3...
