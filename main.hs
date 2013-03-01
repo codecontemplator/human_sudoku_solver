@@ -239,7 +239,7 @@ two_out_of_three board = nub $
 -- solver
 -----------------------------------------------------------------------------
 
-data SolveState = SolveState { state_to_board :: Board, state_to_actions :: [String], state_to_solution :: Board }
+data SolveState = SolveState { state_to_board :: Board, state_to_actions :: [String], state_to_solution :: Maybe Board }
 data StrategyDef = StrategyDef { strategy_to_name :: String, strategy_to_functor :: Strategy } 
 
 
@@ -313,8 +313,8 @@ is_valid_board board maybe_solution = length board == 81 && null duplicates && t
 validate_state :: State SolveState ()
 validate_state = do
 	board <- gets state_to_board
-	solution <- gets state_to_solution
-	if is_valid_board board (Just solution) then
+	maybe_solution <- gets state_to_solution
+	if is_valid_board board maybe_solution then
 		return ()
 	else
 		error "State is invalid."
@@ -384,7 +384,7 @@ solve board = runState (solveM strategies) (SolveState board' [] solution)
 			 (StrategyDef "hidden_single" hidden_single), 
 			 (StrategyDef "naked_pair" naked_pair)]
 		board' = propagate_all_constraints board
-		solution = case brute_force_solve board of { [x] -> x; _ -> error "board is not well defined"; }
+		solution = Nothing --case brute_force_solve board of { [x] -> Just x; _ -> error "board is not well defined"; }
 
 -----------------------------------------------------------------------------
 -- test
@@ -470,6 +470,38 @@ sample_easy = string2board $
 sample_intermediate :: Board
 sample_intermediate = string2board ".8.5......27.....8.5...74....6.5819....693....7941.3....43...1.7.....54......4.7."
 
+-- http://www.svd.se/kultur/spel/sudoku/
+-- puzzle:   51..........3..78.6.....2...8.5.9..3..4....1....7....2.......36..3..1...9..2.6..4
+-- solution: 517482369249365781638197245182549673794623518356718492825974136463851927971236854
+-- rated easy by http://www.sudoku-solutions.com/
+sample_hard :: Board
+sample_hard = string2board $
+	"51......." ++
+	"...3..78." ++
+	"6.....2.." ++
+	".8.5.9..3" ++
+	"..4....1." ++
+	"...7....2" ++
+	".......36" ++
+	"..3..1..." ++
+	"9..2.6..4"
+
+-- http://www.svd.se/kultur/spel/sudoku/
+-- puzzle:   .......1..4..28...79...........4.8.74......5..58.....28..5.3.....6...2....19.....
+-- solution: 682459713143728596795136428219345867467281359358697142824563971976814235531972684
+-- rated intermediate by http://www.sudoku-solutions.com/
+sample_extra_hard :: Board
+sample_extra_hard = string2board $
+	".......1." ++
+	".4..28..." ++
+	"79......." ++
+	"....4.8.7" ++
+	"4......5." ++
+	".58.....2" ++
+	"8..5.3..." ++
+	"..6...2.." ++
+	"..19....."
+
 -- http://www.sudoku-solutions.com/solvingNakedSubsets.php#nakedPair
 sample_naked_pair :: Board
 sample_naked_pair = propagate_all_constraints . string2board $
@@ -530,5 +562,7 @@ run_test =
 			is_valid_solution_ (solve sample_two_out_of_three),
 			is_valid_solution_ (solve sample_naked_pair),
 			is_valid_solution_ (solve sample_easy),
-			is_valid_solution_ (solve sample_intermediate)
+			is_valid_solution_ (solve sample_intermediate),
+			is_valid_solution_ (solve sample_hard),
+			is_valid_solution_ (solve sample_extra_hard)
 			]
