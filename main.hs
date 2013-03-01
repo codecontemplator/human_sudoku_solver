@@ -85,6 +85,15 @@ block_from_subgroup :: SubGroup -> Group
 block_from_subgroup (SubGroup (Col c) i) = Block (get_block c (i*3))
 block_from_subgroup (SubGroup (Row r) i) = Block (get_block (i*3) r)
 
+merge_cells_by_valueset_intersection :: [Cell] -> [Cell]
+merge_cells_by_valueset_intersection [] = []
+merge_cells_by_valueset_intersection ((p,vs):xs) = 
+	let 
+		(ys,zs) = partition (\c->p==cell_position c) xs
+		vs' = foldl (\vs vs' -> intersect vs vs') vs (map cell_values ys)
+	in
+		(p, vs') : merge_cells_by_valueset_intersection zs
+
 -------------------------------------------------------------------------------------------------
 -- formatting / io
 -------------------------------------------------------------------------------------------------
@@ -261,21 +270,23 @@ two_out_of_three board = nub $
 	]
 
 subgroup_exclusion :: Strategy
-subgroup_exclusion board = nub $ concat $
-	[ result | 
+subgroup_exclusion board = merge_cells_by_valueset_intersection $ concat $
+	[ result' | 
 		g <- rows ++ cols,		
 		let empty_cells_in_g = [ c | c@(p,_) <- board, is_group_member g p, not(is_distinct c)],
 		v <- [1..9],
 		let empty_cells_in_g_containing_v = [ c | c@(_,vs) <- empty_cells_in_g, elem v vs],
+		not (null empty_cells_in_g_containing_v),
 		sub_g <- subgroups g,
 		all (is_subgroup_member sub_g.cell_position) empty_cells_in_g_containing_v,	
 		let block = block_from_subgroup sub_g,
 		let candidates = [ c | c@(p,vs) <- board, 
 							   is_group_member block p, 
 							   not(is_subgroup_member sub_g p), 
-							   not(is_distinct c),
 							   elem v vs ],
-		let result = [ (p, vs \\ [v]) | (p,vs) <- candidates ]
+		let result = [ (p, vs \\ [v]) | (p,vs) <- candidates ],
+		not (null result),
+		let result' = trace ("selected " ++ show v ++ " for row/col " ++ show g ++ " and block " ++ show block ++ ", result=" ++ show result) result
 	]
 
 -----------------------------------------------------------------------------
@@ -425,7 +436,8 @@ solve board = runState (solveM strategies) (SolveState board' [] solution)
 			 (StrategyDef "two_out_of_three" two_out_of_three), 
 			 (StrategyDef "naked_single" naked_single), 
 			 (StrategyDef "hidden_single" hidden_single), 
-			 (StrategyDef "naked_pair" naked_pair)]
+			 (StrategyDef "naked_pair" naked_pair),
+			 (StrategyDef "subgroup_exclusion" subgroup_exclusion)]
 		board' = propagate_all_constraints board
 		solution = Nothing --case brute_force_solve board of { [x] -> Just x; _ -> error "board is not well defined"; }
 
@@ -628,19 +640,13 @@ run_test =
 				 ((6,4,5),[3,4,5]),
 				 ((6,3,5),[3,4])],
 			are_equal (subgroup_exclusion sample_subgroup_exclusion)
-				[((4,1,1),[4,5]),((5,2,1),[2]),((6,2,2),[2]),((6,1,2),[4,5]),((3,0,1),[4,5]),
-				 ((4,0,1),[2,4,5]),((4,0,1),[1,4,5]),((5,2,1),[9]),((6,2,2),[9]),((6,0,2),[4,5]),
-				 ((3,1,1),[5]),((3,0,1),[1,5]),((4,1,1),[5,9]),((4,0,1),[1,2,5]),((6,1,2),[5,9]),
-				 ((6,0,2),[2,5]),((8,0,2),[5]),((3,1,1),[4]),((3,0,1),[1,4]),((4,1,1),[4,9]),
-				 ((4,0,1),[1,2,4]),((6,1,2),[4,9]),((6,0,2),[2,4]),((8,0,2),[4]),((3,4,4),[5]),
-				 ((4,4,4),[5]),((3,4,4),[1]),((4,4,4),[1]),((5,8,7),[2,5,9]),((4,8,7),[2,4,5,9]),
-				 ((3,8,7),[4,5,6]),((4,8,7),[1,2,5,9]),((3,8,7),[1,5,6]),((4,7,7),[2,5,9]),
-				 ((8,8,8),[5]),((0,8,6),[2]),((0,7,6),[2]),((3,8,7),[1,4,5]),((2,8,6),[8]),((7,7,8),[2]),
-				 ((7,8,8),[2]),((2,8,6),[7]),((1,8,6),[5]),((1,7,6),[5]),((5,8,7),[1,2,5]),((4,8,7),[1,2,4,5]),
-				 ((5,7,7),[2,5]),((4,7,7),[2,4,5]),((1,8,6),[9]),((1,7,6),[9]),((0,8,6),[6]),((0,7,6),[6]),
-				 ((5,8,7),[1,5,9]),((4,8,7),[1,4,5,9]),((5,7,7),[5,9]),((4,7,7),[4,5,9]),((5,6,7),[5]),
-				 ((4,8,7),[1,2,4,9]),((3,8,7),[1,4,6]),((4,7,7),[2,4,9]),((6,6,8),[5]),((6,6,8),[2]),
-				 ((8,8,8),[4]),((7,7,8),[7]),((7,8,8),[7])],
+				[((4,8,7),[2,9]),
+				 ((3,8,7),[6]),
+				 ((0,8,6),[2]),
+				 ((7,8,8),[2]),
+				 ((4,7,7),[2,4,9]),
+				 ((8,0,2),[5]),
+				 ((6,6,8),[5])],
 			is_valid_solution_ (solve sample_only_choice),
 			is_valid_solution_ (solve sample_only_square),
 			is_valid_solution_ (solve sample_naked_single),
@@ -653,3 +659,6 @@ run_test =
 			]
 
 -- sortBy (\((c1,r1,_),_) ((c2,r2,_),_)->compare (c1+r1*9) (c2+r2*9))
+
+-- problem solve sample_extreme  causes invalid state. 
+-- problem due to subgroup_exclusion sample_subgroup_exclusion
