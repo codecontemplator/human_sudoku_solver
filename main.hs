@@ -344,7 +344,7 @@ brute_force_solve board =
 			concatMap brute_force_solve boards
 
 is_valid_board :: Board -> Maybe Board -> Bool
-is_valid_board board maybe_solution = length board == 81 && null duplicates && test_candiates
+is_valid_board board maybe_solution = length board == 81 && all (\(_,vs)->not(null vs)) board && null duplicates && test_candiates
 	where 
 		duplicates = 
 			[ c | 
