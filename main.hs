@@ -240,7 +240,20 @@ two_out_of_three board = nub $
 -----------------------------------------------------------------------------
 
 data SolveState = SolveState { state_to_board :: Board, state_to_actions :: [String], state_to_solution :: Board }
-data StrategyDef = StrategyDef { strategy_to_name :: String, strategy_to_functor :: Strategy }
+data StrategyDef = StrategyDef { strategy_to_name :: String, strategy_to_functor :: Strategy } 
+
+
+instance Show SolveState where
+	show state =
+		let
+			a = unlines $ "actions:" : state_to_actions state
+			b = unlines $ "board:" : ((\b->board2string b True).state_to_board) state : []
+		in
+			a ++ b
+		
+
+instance Show StrategyDef where
+	show strategy = strategy_to_name strategy	
 
 modify_board :: (Board -> Board) -> State SolveState ()
 modify_board f = modify $ \(SolveState board actions solution) -> SolveState (f board) actions solution
@@ -453,6 +466,10 @@ sample_easy = string2board $
 	".89.4.712" ++
 	"47..3..5."
 
+-- solution: 681549237427136958953827461236758194148693725579412386894375612762981543315264879
+sample_intermediate :: Board
+sample_intermediate = string2board ".8.5......27.....8.5...74....6.5819....693....7941.3....43...1.7.....54......4.7."
+
 -- http://www.sudoku-solutions.com/solvingNakedSubsets.php#nakedPair
 sample_naked_pair :: Board
 sample_naked_pair = propagate_all_constraints . string2board $
@@ -512,5 +529,6 @@ run_test =
 			is_valid_solution_ (solve sample_naked_single),
 			is_valid_solution_ (solve sample_two_out_of_three),
 			is_valid_solution_ (solve sample_naked_pair),
-			is_valid_solution_ (solve sample_easy)
+			is_valid_solution_ (solve sample_easy),
+			is_valid_solution_ (solve sample_intermediate)
 			]
