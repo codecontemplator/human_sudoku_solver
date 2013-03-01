@@ -502,6 +502,20 @@ sample_extra_hard = string2board $
 	"..6...2.." ++
 	"..19....."
 
+-- http://www.sudoku.ws/extreme-1.htm
+-- rated hard by http://www.sudoku-solutions.com/
+sample_extreme :: Board
+sample_extreme = string2board $
+	"..9748..." ++
+	"7........" ++
+	".2.1.9..." ++
+	"..7...24." ++
+	".64.1.59." ++
+	".98...3.." ++
+	"...8.3.2." ++
+	"........6" ++
+	"...2759.."
+
 -- http://www.sudoku-solutions.com/solvingNakedSubsets.php#nakedPair
 sample_naked_pair :: Board
 sample_naked_pair = propagate_all_constraints . string2board $
