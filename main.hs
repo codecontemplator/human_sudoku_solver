@@ -24,6 +24,7 @@ type Cell = (Position,ValueSet)
 type Board = [Cell]
 data Group = Row Int | Col Int | Block Int deriving(Show,Eq)
 type Strategy = Board -> [Cell]
+data SubGroup = SubGroup Group Int deriving Show
 
 -----------------------------------------------------------------------------
 -- sudoku fundamentals
@@ -38,6 +39,9 @@ cell_position = fst
 cell_value :: Cell -> Int
 cell_value (_, [v]) = v
 cell_value _ = error "cell_value called for non-distinct cell"
+
+cell_values :: Cell -> ValueSet
+cell_values = snd
 
 is_distinct :: Cell -> Bool
 is_distinct (_,[_]) = True
@@ -57,8 +61,29 @@ is_group_member (Col c1) (c,_,_) = c1 == c
 is_group_member (Row r1) (_,r,_) = r1 == r
 is_group_member (Block b1) (_,_,b) = b1 == b
 
+rows :: [Group]
+rows = map Row [0..8]
+
+cols :: [Group]
+cols = map Col [0..8]
+
+blocks :: [Group]
+blocks = map Block [0..8]
+
 all_groups :: [Group]
-all_groups = map Row [0..8] ++ map Col [0..8] ++ map Block [0..8]
+all_groups = rows ++ cols ++ blocks
+
+subgroups :: Group -> [SubGroup]
+subgroups g = [SubGroup g 0, SubGroup g 1, SubGroup g 2]
+
+is_subgroup_member :: SubGroup -> Position -> Bool
+is_subgroup_member (SubGroup (Col c1) i) (c,r,_) = c1 == c && r >= i*3 && r < (i+1)*3
+is_subgroup_member (SubGroup (Row r1) i) (c,r,_) = r1 == r && c >= i*3 && c < (i+1)*3
+is_subgroup_member _ _ = error "subgroups cannot be constructed from blocks"
+
+block_from_subgroup :: SubGroup -> Group
+block_from_subgroup (SubGroup (Col c) i) = Block (get_block c (i*3))
+block_from_subgroup (SubGroup (Row r) i) = Block (get_block (i*3) r)
 
 -------------------------------------------------------------------------------------------------
 -- formatting / io
@@ -233,6 +258,24 @@ two_out_of_three board = nub $
 		let valid_positions_for_v = [ p | (p,_) <- g3nd, is_allowed board v p ],
 		length valid_positions_for_v == 1,
 		let vp = head valid_positions_for_v
+	]
+
+subgroup_exclusion :: Strategy
+subgroup_exclusion board = nub $ concat $
+	[ result | 
+		g <- rows ++ cols,		
+		let empty_cells_in_g = [ c | c@(p,_) <- board, is_group_member g p, not(is_distinct c)],
+		v <- [1..9],
+		let empty_cells_in_g_containing_v = [ c | c@(_,vs) <- empty_cells_in_g, elem v vs],
+		sub_g <- subgroups g,
+		all (is_subgroup_member sub_g.cell_position) empty_cells_in_g_containing_v,	
+		let block = block_from_subgroup sub_g,
+		let candidates = [ c | c@(p,vs) <- board, 
+							   is_group_member block p, 
+							   not(is_subgroup_member sub_g p), 
+							   not(is_distinct c),
+							   elem v vs ],
+		let result = [ (p, vs \\ [v]) | (p,vs) <- candidates ]
 	]
 
 -----------------------------------------------------------------------------
@@ -453,6 +496,19 @@ sample_two_out_of_three = string2board $
 	".12...976" ++
 	"74..961.."
 
+-- http://www.sudokudragon.com/sudokustrategy.htm
+sample_subgroup_exclusion :: Board
+sample_subgroup_exclusion = propagate_all_constraints.string2board $
+	"769..3.8." ++
+	"812..6.37" ++
+	"53478..16" ++
+	"381964752" ++
+	"426..7893" ++
+	"975238641" ++
+	"14387..69" ++
+	"...3..1.8" ++
+	"......3.."
+
 -- http://www.svd.se/kultur/spel/sudoku/
 sample_easy :: Board
 sample_easy = string2board $
@@ -503,6 +559,7 @@ sample_extra_hard = string2board $
 	"..19....."
 
 -- http://www.sudoku.ws/extreme-1.htm
+-- solution: 519748632783652419426139875357986241264317598198524367975863124832491756641275983
 -- rated hard by http://www.sudoku-solutions.com/
 sample_extreme :: Board
 sample_extreme = string2board $
@@ -570,6 +627,20 @@ run_test =
 				 ((6,5,5),[3,5]),
 				 ((6,4,5),[3,4,5]),
 				 ((6,3,5),[3,4])],
+			are_equal (subgroup_exclusion sample_subgroup_exclusion)
+				[((4,1,1),[4,5]),((5,2,1),[2]),((6,2,2),[2]),((6,1,2),[4,5]),((3,0,1),[4,5]),
+				 ((4,0,1),[2,4,5]),((4,0,1),[1,4,5]),((5,2,1),[9]),((6,2,2),[9]),((6,0,2),[4,5]),
+				 ((3,1,1),[5]),((3,0,1),[1,5]),((4,1,1),[5,9]),((4,0,1),[1,2,5]),((6,1,2),[5,9]),
+				 ((6,0,2),[2,5]),((8,0,2),[5]),((3,1,1),[4]),((3,0,1),[1,4]),((4,1,1),[4,9]),
+				 ((4,0,1),[1,2,4]),((6,1,2),[4,9]),((6,0,2),[2,4]),((8,0,2),[4]),((3,4,4),[5]),
+				 ((4,4,4),[5]),((3,4,4),[1]),((4,4,4),[1]),((5,8,7),[2,5,9]),((4,8,7),[2,4,5,9]),
+				 ((3,8,7),[4,5,6]),((4,8,7),[1,2,5,9]),((3,8,7),[1,5,6]),((4,7,7),[2,5,9]),
+				 ((8,8,8),[5]),((0,8,6),[2]),((0,7,6),[2]),((3,8,7),[1,4,5]),((2,8,6),[8]),((7,7,8),[2]),
+				 ((7,8,8),[2]),((2,8,6),[7]),((1,8,6),[5]),((1,7,6),[5]),((5,8,7),[1,2,5]),((4,8,7),[1,2,4,5]),
+				 ((5,7,7),[2,5]),((4,7,7),[2,4,5]),((1,8,6),[9]),((1,7,6),[9]),((0,8,6),[6]),((0,7,6),[6]),
+				 ((5,8,7),[1,5,9]),((4,8,7),[1,4,5,9]),((5,7,7),[5,9]),((4,7,7),[4,5,9]),((5,6,7),[5]),
+				 ((4,8,7),[1,2,4,9]),((3,8,7),[1,4,6]),((4,7,7),[2,4,9]),((6,6,8),[5]),((6,6,8),[2]),
+				 ((8,8,8),[4]),((7,7,8),[7]),((7,8,8),[7])],
 			is_valid_solution_ (solve sample_only_choice),
 			is_valid_solution_ (solve sample_only_square),
 			is_valid_solution_ (solve sample_naked_single),
@@ -580,3 +651,5 @@ run_test =
 			is_valid_solution_ (solve sample_hard),
 			is_valid_solution_ (solve sample_extra_hard)
 			]
+
+-- sortBy (\((c1,r1,_),_) ((c2,r2,_),_)->compare (c1+r1*9) (c2+r2*9))
