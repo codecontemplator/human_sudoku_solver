@@ -14,7 +14,7 @@ import Data.Map(fromListWith, toList)
 import Control.Exception(assert)
 import Control.Monad.State
 
------------------------------------------------------------------------------
+--------------------------------------------------------------------------
 -- types
 -----------------------------------------------------------------------------
 
@@ -56,10 +56,10 @@ is_allowed board value pos = not $ elem value $ [ v | c@(p,[v]) <- board, is_dis
 is_complete :: Board -> Bool
 is_complete board = all is_distinct board
 
-is_group_member :: Group -> Position -> Bool
-is_group_member (Col c1) (c,_,_) = c1 == c
-is_group_member (Row r1) (_,r,_) = r1 == r
-is_group_member (Block b1) (_,_,b) = b1 == b
+is_group_member :: Group -> Cell -> Bool
+is_group_member (Col c1) ((c,_,_),_) = c1 == c
+is_group_member (Row r1) ((_,r,_),_) = r1 == r
+is_group_member (Block b1) ((_,_,b),_) = b1 == b
 
 rows :: [Group]
 rows = map Row [0..8]
@@ -76,9 +76,9 @@ all_groups = rows ++ cols ++ blocks
 subgroups :: Group -> [SubGroup]
 subgroups g = [SubGroup g 0, SubGroup g 1, SubGroup g 2]
 
-is_subgroup_member :: SubGroup -> Position -> Bool
-is_subgroup_member (SubGroup (Col c1) i) (c,r,_) = c1 == c && r >= i*3 && r < (i+1)*3
-is_subgroup_member (SubGroup (Row r1) i) (c,r,_) = r1 == r && c >= i*3 && c < (i+1)*3
+is_subgroup_member :: SubGroup -> Cell -> Bool
+is_subgroup_member (SubGroup (Col c1) i) ((c,r,_),_) = c1 == c && r >= i*3 && r < (i+1)*3
+is_subgroup_member (SubGroup (Row r1) i) ((c,r,_),_) = r1 == r && c >= i*3 && c < (i+1)*3
 is_subgroup_member _ _ = error "subgroups cannot be constructed from blocks"
 
 block_from_subgroup :: SubGroup -> Group
@@ -138,7 +138,7 @@ only_choice :: Strategy
 only_choice board = 
     [ (p, v) | 
     	g <- all_groups, 
-    	let gm = [ c | c@(p,_) <- board, is_group_member g p],
+    	let gm = [ c | c <- board, is_group_member g c],
     	let (d,nd) = partition is_distinct gm, 
     	length nd == 1,
     	let [(p,_)] = nd,
@@ -181,7 +181,7 @@ naked_pair :: Strategy
 naked_pair board = concat $
 	[ reduced |
 		g <- all_groups,
-		let cells_in_g = [ c | c@(p,_) <- board, is_group_member g p ],
+		let cells_in_g = [ c | c <- board, is_group_member g c ],
 		c1@(p1,vs1) <- cells_in_g, c2@(p2,vs2) <- cells_in_g, p1 < p2,
 		length vs1 == 2, vs1 == vs2,
 		let reducable = (filter (not.is_distinct) cells_in_g) \\ [c1, c2],
@@ -203,7 +203,7 @@ hidden_single :: Strategy
 hidden_single board = 
 	[ (head hits,[v]) | 
 		g <- all_groups,
-		let empty_cells_in_g = [ c | c@(p,_) <- board, is_group_member g p, not(is_distinct c) ],
+		let empty_cells_in_g = [ c | c <- board, is_group_member g c, not(is_distinct c) ],
 		v <- [1..9],
 		let hits = [ p | c@(p,vs) <- empty_cells_in_g, elem v vs, is_allowed board v p],
 		length hits == 1
@@ -225,7 +225,7 @@ only_square :: Strategy
 only_square board = concat $
 	[ [(p1,vs1), (p2, vs2)] | 
 			   g <- all_groups, 
-		   	   let gm = [ c | c@(p,_) <- board, is_group_member g p ],
+		   	   let gm = [ c | c <- board, is_group_member g c ],
 			   let (d, nd) = partition is_distinct gm,
 			   length nd == 2,			   
 			   (p1,_) <- nd, (p2,_) <- nd, p1 /= p2,	
@@ -260,9 +260,9 @@ two_out_of_three board = nub $
 		v <- [1..9],
 		g1 <- gset, g2 <- gset, g3 <- gset,
 		g1 /= g2, g1 /= g3, g2 /= g3,
-		let g1d = [ c | c@(p,_) <- board, is_distinct c, is_group_member g1 p ],
-		let g2d = [ c | c@(p,_) <- board, is_distinct c, is_group_member g2 p ],
-		let (g3d, g3nd) = partition is_distinct [ c | c@(p,_) <- board, is_group_member g3 p ],
+		let g1d = [ c | c <- board, is_distinct c, is_group_member g1 c ],
+		let g2d = [ c | c <- board, is_distinct c, is_group_member g2 c ],
+		let (g3d, g3nd) = partition is_distinct [ c | c <- board, is_group_member g3 c ],
 		elem v (map cell_value g1d), elem v (map cell_value g2d), not(elem v (map cell_value g3d)),
 		let valid_positions_for_v = [ p | (p,_) <- g3nd, is_allowed board v p ],
 		length valid_positions_for_v == 1,
@@ -273,16 +273,16 @@ subgroup_exclusion :: Strategy
 subgroup_exclusion board = merge_cells_by_valueset_intersection $ concat $
 	[ result' | 
 		g <- rows ++ cols,	
-		let (d, nd) = partition is_distinct [ c | c@(p,_) <- board, is_group_member g p],	
+		let (d, nd) = partition is_distinct [ c | c <- board, is_group_member g c],	
 		v <- [1..9] \\ (map cell_value d),
 		let empty_cells_in_g_containing_v = [ c | c@(p,vs) <- nd, elem v vs ],
 		not (null empty_cells_in_g_containing_v),
 		sub_g <- subgroups g,
-		all (is_subgroup_member sub_g.cell_position) empty_cells_in_g_containing_v,	
+		all (is_subgroup_member sub_g) empty_cells_in_g_containing_v,	
 		let block = block_from_subgroup sub_g,
-		let candidates = [ c | c@(p,vs) <- board, 
-							   is_group_member block p, 
-							   not(is_subgroup_member sub_g p), 
+		let candidates = [ c | c@(_,vs) <- board, 
+							   is_group_member block c, 
+							   not(is_subgroup_member sub_g c), 
 							   elem v vs ],
 		let result = [ (p, vs \\ [v]) | (p,vs) <- candidates ],
 		not (null result),
@@ -349,7 +349,7 @@ is_valid_board board maybe_solution = length board == 81 && all (\(_,vs)->not(nu
 		duplicates = 
 			[ c | 
 				g <- all_groups, 
-				let cells_in_g = [ c | c@(p,_)<-board, is_distinct c, is_group_member g p],
+				let cells_in_g = [ c | c<-board, is_distinct c, is_group_member g c],
 				c@(p,[v]) <- cells_in_g, c'@(p',[v']) <- cells_in_g,
 				p /= p', v == v'
 			]
