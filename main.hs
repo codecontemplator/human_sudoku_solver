@@ -273,10 +273,9 @@ subgroup_exclusion :: Strategy
 subgroup_exclusion board = merge_cells_by_valueset_intersection $ concat $
 	[ result' | 
 		g <- rows ++ cols,		
-		let (filled_cells_in_g, empty_cells_in_g) = partition is_distinct [ c | c@(p,_) <- board, is_group_member g p],
 		v <- [1..9],
-		let filled_cells_in_g_containing_v = [ c | c@(_,vs) <- filled_cells_in_g, elem v vs], 
-		let empty_cells_in_g_containing_v = [ c | c@(_,vs) <- empty_cells_in_g, elem v vs],
+		let (filled_cells_in_g_containing_v, empty_cells_in_g_containing_v) = 
+			partition is_distinct [ c | c@(p,vs) <- board, is_group_member g p, elem v vs ],
 		null (filled_cells_in_g_containing_v), not (null empty_cells_in_g_containing_v),
 		sub_g <- subgroups g,
 		all (is_subgroup_member sub_g.cell_position) empty_cells_in_g_containing_v,	
