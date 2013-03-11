@@ -210,6 +210,34 @@ hidden_single board =
 	]
 
 --
+-- Hidden pair
+--
+-- The "hidden pair" solving technique is an intermediate solving technique. 
+-- Using this technique the candidate values of all empty cells in a given row, column and box are determined. 
+-- If a given pair of candidates value appears in only two empty cells in a row, column or box then these 
+-- candidates must go in these cells and all other candidates can be removed from these cells. 
+-- Reducing candidate lists may reveal a hidden or naked single in another unsolved cell, generally however 
+-- the technique is a step to solving the next cell. 
+--
+-- ref: http://www.sudoku-solutions.com/solvingHiddenSubsets.php#hiddenPair
+--
+hidden_pair :: Strategy
+hidden_pair board = concat $
+	[ [(p1,[v1,v2]),(p2,[v1,v2])] |
+		g <- all_groups,
+		let empty_cells_in_g = [ c | c <- board, is_group_member g c, not(is_distinct c) ],
+		let candidate_values = (nub . concatMap cell_values) empty_cells_in_g,
+		v1 <- candidate_values, 
+		v2 <- candidate_values, 
+		v1 < v2,
+		let hits = filter (\(p,vs) -> elem v1 vs || elem v2 vs) empty_cells_in_g,
+		length hits == 2,
+		let [(p1,vs1),(p2,vs2)] = hits,
+		elem v1 vs1 && elem v2 vs1 && elem v1 vs2 && elem v2 vs2,
+		length vs1 > 2 || length vs2 > 2		
+	]
+
+--
 -- Only square (I find no point in using this strategy - use naked single instead)
 --
 -- Often you will find within a group of Sudoku squares that there is only one place that 
@@ -599,6 +627,18 @@ sample_naked_pair = propagate_all_constraints . string2board $
 	"495.6.823" ++
 	".6.854179"
 
+sample_hidden_pair :: Board
+sample_hidden_pair = propagate_all_constraints . string2board $
+	"465.8.32." ++
+	"798.326.5" ++
+	"12356..98" ++
+	"8..2.5.3." ++
+	"..2...5.." ++
+	"5..3.628." ++
+	".84.53172" ++
+	"....2.854" ++
+	"257.1.963"
+
 run_test = 
 	let 
 		are_equal a b = a \\ b == [] && b \\ a == []
@@ -647,6 +687,7 @@ run_test =
 				  ((4,7,7),[2,4,9]),
 				  ((8,0,2),[5]),
 				  ((6,6,8),[5])],
+			are_equal (hidden_pair sample_hidden_pair) [((5,4,4),[1,8]),((3,4,4),[1,8])],
 			is_valid_solution_ (solve sample_only_choice),
 			is_valid_solution_ (solve sample_only_square),
 			is_valid_solution_ (solve sample_naked_single),
