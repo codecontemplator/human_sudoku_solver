@@ -700,3 +700,5 @@ run_test =
 			]
 
 -- sortBy (\((c1,r1,_),_) ((c2,r2,_),_)->compare (c1+r1*9) (c2+r2*9))
+
+-- problem detected, solve sample_extreme hangs due to error in naked_pair (as it seems)
