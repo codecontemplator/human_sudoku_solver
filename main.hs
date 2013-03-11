@@ -222,8 +222,8 @@ hidden_single board =
 -- ref: http://www.sudoku-solutions.com/solvingHiddenSubsets.php#hiddenPair
 --
 hidden_pair :: Strategy
-hidden_pair board = concat $
-	[ [(p1,[v1,v2]),(p2,[v1,v2])] |
+hidden_pair board =
+	[ c |
 		g <- all_groups,
 		let empty_cells_in_g = [ c | c <- board, is_group_member g c, not(is_distinct c) ],
 		let candidate_values = (nub . concatMap cell_values) empty_cells_in_g,
@@ -232,9 +232,8 @@ hidden_pair board = concat $
 		v1 < v2,
 		let hits = filter (\(p,vs) -> elem v1 vs || elem v2 vs) empty_cells_in_g,
 		length hits == 2,
-		let [(p1,vs1),(p2,vs2)] = hits,
-		elem v1 vs1 && elem v2 vs1 && elem v1 vs2 && elem v2 vs2,
-		length vs1 > 2 || length vs2 > 2		
+		all (\(_,vs) -> elem v1 vs && elem v2 vs) hits,
+		c <- [ (p,[v1,v2]) | (p,vs) <- hits, length vs > 2]
 	]
 
 --
@@ -465,6 +464,7 @@ solve board = runState (solveM strategies) (SolveState board' [] solution)
 			 (StrategyDef "naked_single" naked_single), 
 			 (StrategyDef "hidden_single" hidden_single), 
 			 (StrategyDef "naked_pair" naked_pair),
+			 (StrategyDef "hidden_pair" hidden_pair),			 
 			 (StrategyDef "subgroup_exclusion" subgroup_exclusion)]
 		board' = propagate_all_constraints board
 		solution = Nothing --case brute_force_solve board of { [x] -> Just x; _ -> error "board is not well defined"; }
