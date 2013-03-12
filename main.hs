@@ -190,6 +190,33 @@ naked_pair board =
 	]
 
 --
+-- Naked Triple
+-- 
+-- The "naked triple" solving technique is similar to the naked pair solving technique described above. 
+-- In a naked triple, three cells in a row, column or block contain some combination of the same three candidates. 
+-- Each individual cell in the naked triple does not have to contain all three candidates however. 
+-- In fact it is perfectly legal for each individual cell to have only two of the three candidates. 
+--
+-- ref: http://www.sudoku-solutions.com/solvingNakedSubsets.php#nakedTriple
+--
+naked_triple :: Strategy
+naked_triple board =
+	[ rc |
+		g <- all_groups,
+		let empty_cells_in_g = [ c | c <- board, is_group_member g c, not(is_distinct c) ],
+		let candidate_values = (nub . concatMap cell_values) empty_cells_in_g,
+		v1 <- candidate_values,
+		v2 <- candidate_values,
+		v3 <- candidate_values,
+		v1 < v2 && v1 < v3 && v2 < v3,
+		let triple = [ c | c@(p,vs) <- empty_cells_in_g, intersect vs [v1,v2,v3] == vs],
+		length triple == 3,
+		rc <- [ (p,vs') | c@(p,vs) <- empty_cells_in_g \\ triple, 
+		                  let vs' = vs \\ [v1,v2,v3], 
+		                  length vs' < length vs]
+	]
+
+--
 -- Hidden single 
 --
 -- The hidden single solving technique is a very effective but still simple solving 
@@ -464,7 +491,8 @@ solve board = runState (solveM strategies) (SolveState board' [] solution)
 			 (StrategyDef "naked_single" naked_single), 
 			 (StrategyDef "hidden_single" hidden_single), 
 			 (StrategyDef "naked_pair" naked_pair),
-			 (StrategyDef "hidden_pair" hidden_pair),			 
+			 (StrategyDef "hidden_pair" hidden_pair),	
+			 (StrategyDef "naked_triple" naked_triple),		 
 			 (StrategyDef "subgroup_exclusion" subgroup_exclusion)]
 		board' = propagate_all_constraints board
 		solution = Nothing --case brute_force_solve board of { [x] -> Just x; _ -> error "board is not well defined"; }
@@ -511,6 +539,32 @@ sample_naked_single = string2board $
 	"3.14....." ++
 	"5....34.." ++
 	"294..65.."
+
+-- http://www.sudoku-solutions.com/solvingNakedSubsets.php#nakedPair
+sample_naked_pair :: Board
+sample_naked_pair = propagate_all_constraints . string2board $
+	"1.4.9..68" ++
+	"956.18.34" ++
+	"..84.6951" ++
+	"51.....86" ++
+	"8..6...12" ++
+	"64..8..97" ++
+	"781923645" ++
+	"495.6.823" ++
+	".6.854179"
+
+-- http://www.sudoku-solutions.com/solvingNakedSubsets.php#nakedTriple
+sample_naked_triple :: Board
+sample_naked_triple = propagate_all_constraints . string2board $
+	"719.3.86." ++
+	"243.861.9" ++
+	"56891..43" ++
+	"3..6.9.8." ++
+	"..6...9.." ++
+	"9..8.163." ++
+	".37.98526" ++
+	"....6.397" ++
+	"692.5.418"
 
 sample_only_square :: Board
 sample_only_square = string2board $
@@ -614,19 +668,6 @@ sample_extreme = string2board $
 	"........6" ++
 	"...2759.."
 
--- http://www.sudoku-solutions.com/solvingNakedSubsets.php#nakedPair
-sample_naked_pair :: Board
-sample_naked_pair = propagate_all_constraints . string2board $
-	"1.4.9..68" ++
-	"956.18.34" ++
-	"..84.6951" ++
-	"51.....86" ++
-	"8..6...12" ++
-	"64..8..97" ++
-	"781923645" ++
-	"495.6.823" ++
-	".6.854179"
-
 sample_hidden_pair :: Board
 sample_hidden_pair = propagate_all_constraints . string2board $
 	"465.8.32." ++
@@ -658,6 +699,8 @@ run_test =
 				 ((5,6,7),[2]), 
 				 ((6,6,8),[8]), 
 				 ((2,7,6),[6])],
+			are_equal (naked_pair sample_naked_pair) [((2,4,3),[7,9]),((2,3,3),[7,9])],
+			are_equal (naked_triple sample_naked_triple) [((5,4,4),[3,5]),((3,4,4),[3,5])],
 			are_equal (two_out_of_three sample_two_out_of_three)
 				[((8,1,2),[1]), 
 				 ((6,0,2),[3]), 
@@ -674,7 +717,6 @@ run_test =
 				 ((3,4,4),[9]),
 				 ((7,8,8),[5]),
 				 ((8,3,5),[9])],
-			are_equal (naked_pair sample_naked_pair) [((2,4,3),[7,9]),((2,3,3),[7,9])],
 			are_equal (subgroup_exclusion sample_subgroup_exclusion)
 				 [((4,8,7),[2,9]),
 				  ((3,8,7),[6]),
