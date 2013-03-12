@@ -516,7 +516,9 @@ solve board = runState (solveM strategies) (SolveState board' [] solution)
 			 (StrategyDef "hidden_single" hidden_single), 
 			 (StrategyDef "naked_pair" naked_pair),
 			 (StrategyDef "hidden_pair" hidden_pair),	
-			 (StrategyDef "naked_triple" naked_triple),		 
+			 (StrategyDef "naked_triple" naked_triple),		
+			 (StrategyDef "naked_quad" (naked_ntuple 4)),
+			 (StrategyDef "naked_qint" (naked_ntuple 5)),
 			 (StrategyDef "subgroup_exclusion" subgroup_exclusion)]
 		board' = propagate_all_constraints board
 		solution = Nothing --case brute_force_solve board of { [x] -> Just x; _ -> error "board is not well defined"; }
