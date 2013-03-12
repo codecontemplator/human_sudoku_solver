@@ -178,15 +178,15 @@ naked_single board =
 -- ref: http://www.sudoku-solutions.com/solvingNakedSubsets.php#nakedPair
 --
 naked_pair :: Strategy
-naked_pair board = concat $
-	[ reduced |
+naked_pair board =
+	[ rc |
 		g <- all_groups,
-		let cells_in_g = [ c | c <- board, is_group_member g c ],
-		c1@(p1,vs1) <- cells_in_g, c2@(p2,vs2) <- cells_in_g, p1 < p2,
+		let empty_cells_in_g = [ c | c <- board, is_group_member g c, not(is_distinct c) ],
+		c1@(p1,vs1) <- empty_cells_in_g, c2@(p2,vs2) <- empty_cells_in_g, p1 < p2,
 		length vs1 == 2, vs1 == vs2,
-		let reducable = (filter (not.is_distinct) cells_in_g) \\ [c1, c2],
-		length reducable > 0,
-		let reduced = map (\(p,vs)->(p,vs\\vs1)) reducable
+		rc <- [ (p,vs') | c@(p,vs) <- empty_cells_in_g \\ [c1,c2], 
+		                  let vs' = vs \\ vs1, 
+		                  length vs' < length vs]
 	]
 
 --
@@ -674,12 +674,7 @@ run_test =
 				 ((3,4,4),[9]),
 				 ((7,8,8),[5]),
 				 ((8,3,5),[9])],
-			are_equal (naked_pair sample_naked_pair)
-				[((2,4,3),[7,9]),
-				 ((2,3,3),[7,9]),
-				 ((6,5,5),[3,5]),
-				 ((6,4,5),[3,4,5]),
-				 ((6,3,5),[3,4])],
+			are_equal (naked_pair sample_naked_pair) [((2,4,3),[7,9]),((2,3,3),[7,9])],
 			are_equal (subgroup_exclusion sample_subgroup_exclusion)
 				 [((4,8,7),[2,9]),
 				  ((3,8,7),[6]),
