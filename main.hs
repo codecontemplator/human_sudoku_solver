@@ -27,6 +27,16 @@ type Strategy = Board -> [Cell]
 data SubGroup = SubGroup Group Int deriving Show
 
 -----------------------------------------------------------------------------
+-- utilities
+-----------------------------------------------------------------------------
+
+-- http://stackoverflow.com/questions/14267196/fast-obtention-of-all-the-subsets-of-size-n-in-haskell
+choose :: [a] -> Int -> [[a]]
+_      `choose` 0       = [[]]
+[]     `choose` _       =  []
+(x:xs) `choose` k       =  (x:) `fmap` (xs `choose` (k-1)) ++ xs `choose` k
+
+-----------------------------------------------------------------------------
 -- sudoku fundamentals
 -----------------------------------------------------------------------------
 
@@ -214,6 +224,20 @@ naked_triple board =
 		rc <- [ (p,vs') | c@(p,vs) <- empty_cells_in_g \\ triple, 
 		                  let vs' = vs \\ [v1,v2,v3], 
 		                  length vs' < length vs]
+	]
+
+naked_ntuple :: Int -> Strategy
+naked_ntuple n board =
+	[ rc |
+		g <- all_groups,
+		let empty_cells_in_g = [ c | c <- board, is_group_member g c, not(is_distinct c) ],
+		let candidate_values = (nub . concatMap cell_values) empty_cells_in_g,
+		selected_values <- candidate_values `choose` n,
+		let ntuple = [ c | c@(_,vs) <- empty_cells_in_g, intersect vs selected_values == vs],
+		length ntuple == n,
+		rc <- [ (p,vs') | (p,vs) <- empty_cells_in_g \\ ntuple, 
+		                  let vs' = vs \\ selected_values, 
+		                  length vs' < length vs]		
 	]
 
 --
@@ -701,6 +725,8 @@ run_test =
 				 ((2,7,6),[6])],
 			are_equal (naked_pair sample_naked_pair) [((2,4,3),[7,9]),((2,3,3),[7,9])],
 			are_equal (naked_triple sample_naked_triple) [((5,4,4),[3,5]),((3,4,4),[3,5])],
+			are_equal (naked_pair sample_naked_pair) (naked_ntuple 2 sample_naked_pair),
+			are_equal (naked_triple sample_naked_triple) (naked_ntuple 3 sample_naked_triple),			
 			are_equal (two_out_of_three sample_two_out_of_three)
 				[((8,1,2),[1]), 
 				 ((6,0,2),[3]), 
